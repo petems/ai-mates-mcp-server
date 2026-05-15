@@ -17,7 +17,7 @@ schemas.
 From GitHub:
 
 ```bash
-uvx --from git+https://github.com/<owner>/ai-mates-mcp-server.git ai-mates-mcp-server
+uvx --from git+https://github.com/petems/ai-mates-mcp-server.git ai-mates-mcp-server
 ```
 
 From PyPI, once published:
@@ -38,7 +38,7 @@ Codex:
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/<owner>/ai-mates-mcp-server.git",
+        "git+https://github.com/petems/ai-mates-mcp-server.git",
         "ai-mates-mcp-server"
       ],
       "env": {
