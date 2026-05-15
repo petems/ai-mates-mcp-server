@@ -1,0 +1,41 @@
+[project]
+name = "ai-mates-mcp-server"
+version = "0.1.0"
+description = "A slim PAL-inspired MCP server for OpenAI, Anthropic, and Gemini"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "Peter Souter" }]
+dependencies = [
+    "anthropic>=0.74.0",
+    "google-genai>=1.19.0",
+    "mcp>=1.12.0",
+    "openai>=1.55.2",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+ai-mates-mcp-server = "ai_mates_mcp_server.server:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "C4"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
