@@ -235,7 +235,7 @@ AI Mates ships with a small current model catalogue, but you can add or override
 models locally without opening a PR:
 
 ```bash
-MATES_MODELS_FILE=/Users/peter/.config/ai-mates/models.json
+MATES_MODELS_FILE=$HOME/.config/ai-mates/models.json
 ```
 
 ```json

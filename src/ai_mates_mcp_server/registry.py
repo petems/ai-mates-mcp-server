@@ -40,15 +40,25 @@ class ModelEntry:
         if not model_id:
             raise ModelRegistryError("Model entry id cannot be empty")
 
-        aliases = tuple(
-            _normalize_key(alias)
-            for alias in data.get("aliases", [])
-            if str(alias).strip()
-        )
+        raw_aliases = data.get("aliases", [])
+        if raw_aliases is None:
+            raw_aliases = []
+        if not isinstance(raw_aliases, (list, tuple)):
+            raise ModelRegistryError(
+                f"Model entry aliases for '{model_id}' must be an array"
+            )
+        aliases = []
+        for alias in raw_aliases:
+            if not isinstance(alias, str):
+                raise ModelRegistryError(
+                    f"Model entry aliases for '{model_id}' must be strings"
+                )
+            if alias.strip():
+                aliases.append(_normalize_key(alias))
         return cls(
             id=model_id,
             provider=provider,  # type: ignore[arg-type]
-            aliases=aliases,
+            aliases=tuple(aliases),
             rank=int(data.get("rank", 0)),
             status=str(data.get("status", "active")).strip().lower(),
             source=source,
@@ -86,7 +96,11 @@ class ModelRegistry:
         if provider_defaults:
             for provider, model_id in provider_defaults.items():
                 if model_id:
-                    self.defaults[provider] = model_id
+                    self.defaults[provider] = _validate_default_model_id(
+                        provider,
+                        model_id,
+                        source="settings",
+                    )
 
     def resolve(self, model: str) -> ModelEntry | None:
         key = _normalize_key(model)
@@ -157,7 +171,11 @@ class ModelRegistry:
         for provider, model_id in data.get("defaults", {}).items():
             normalized_provider = provider.strip().lower()
             if normalized_provider in {"openai", "anthropic", "gemini"}:
-                self.defaults[normalized_provider] = model_id
+                self.defaults[normalized_provider] = _validate_default_model_id(
+                    normalized_provider,
+                    model_id,
+                    source=source,
+                )
 
         for raw_entry in data.get("models", []):
             entry = ModelEntry.from_mapping(raw_entry, source=source)
@@ -182,7 +200,21 @@ class ModelRegistry:
                 f"Model '{entry.id}' is marked {entry.status}. "
                 "Set MATES_ALLOW_DEPRECATED_MODELS=true to use it anyway."
             )
+        allowed_statuses = sorted(ACTIVE_STATUSES | DEPRECATED_STATUSES)
+        raise ModelRegistryError(
+            f"Model '{entry.id}' has unsupported status '{entry.status}'. "
+            f"Allowed statuses: {', '.join(allowed_statuses)}."
+        )
 
 
 def _normalize_key(value: str) -> str:
     return value.strip().lower()
+
+
+def _validate_default_model_id(provider: str, model_id: Any, *, source: str) -> str:
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ModelRegistryError(
+            f"Invalid default model id for provider '{provider}' in {source} data: "
+            f"{model_id!r}"
+        )
+    return model_id.strip()

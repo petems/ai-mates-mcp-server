@@ -6,6 +6,7 @@ import pytest
 
 from ai_mates_mcp_server.config import Settings
 from ai_mates_mcp_server.providers import ProviderError, ProviderRegistry
+from ai_mates_mcp_server.registry import ModelEntry, ModelRegistry, ModelRegistryError
 
 
 def settings(**overrides):
@@ -116,6 +117,50 @@ def test_local_alias_overrides_packaged_alias(tmp_path):
 
     assert provider.name == "openai"
     assert model == "gpt-5.4-mini"
+
+
+def test_local_config_rejects_string_aliases(tmp_path):
+    models_file = tmp_path / "mates-models.json"
+    models_file.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "id": "gpt-6-test",
+                        "provider": "openai",
+                        "aliases": "future-openai",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ModelRegistryError, match="aliases.*array"):
+        ProviderRegistry(settings(models_file=str(models_file)))
+
+
+def test_local_config_rejects_invalid_defaults(tmp_path):
+    models_file = tmp_path / "mates-models.json"
+    models_file.write_text(
+        json.dumps({"defaults": {"openai": 123}, "models": []}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ModelRegistryError, match="Invalid default model id"):
+        ProviderRegistry(settings(models_file=str(models_file)))
+
+
+def test_registry_rejects_unknown_status():
+    registry = ModelRegistry(allow_deprecated=True)
+    registry.entries["gpt-test"] = ModelEntry(
+        id="gpt-test",
+        provider="openai",
+        status="sunset-soon",
+    )
+
+    with pytest.raises(ModelRegistryError, match="unsupported status"):
+        registry.resolve("gpt-test")
 
 
 def test_deprecated_models_error_by_default():
