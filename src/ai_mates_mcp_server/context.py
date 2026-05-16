@@ -96,19 +96,21 @@ def read_relevant_files(paths: list[str], workspace_root: str | None = None) -> 
     max_chars = load_settings().max_context_chars
     chunks: list[str] = []
     used = 0
+    truncation_marker = "\n[truncated]"
 
     for path, marker in _expand_relevant_paths(paths, root):
-        if marker:
-            chunks.append(marker)
-            continue
-
-        chunk = _read_file(path, root)
         remaining = max_chars - used
         if remaining <= 0:
             chunks.append("[context truncated]")
             break
+
+        chunk = marker if marker is not None else _read_file(path, root)
         if len(chunk) > remaining:
-            chunk = chunk[:remaining] + "\n[truncated]"
+            if remaining <= len(truncation_marker):
+                chunks.append("[context truncated]")
+            else:
+                chunks.append(chunk[: remaining - len(truncation_marker)] + truncation_marker)
+            break
         used += len(chunk)
         chunks.append(chunk)
     return "\n\n".join(chunks)
