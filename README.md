@@ -28,8 +28,12 @@ uvx ai-mates-mcp-server
 
 ## MCP Configuration
 
-Add this to a client config such as `.mcp.json`, Claude Desktop, Claude Code, or
-Codex:
+Set at least one API key in your client config. Leave unused providers out or
+replace their placeholders before starting the client.
+
+### Claude Code
+
+Add this to your user-level Claude Code MCP config:
 
 ```json
 {
@@ -42,23 +46,143 @@ Codex:
         "ai-mates-mcp-server"
       ],
       "env": {
-        "OPENAI_API_KEY": "your-openai-key",
-        "ANTHROPIC_API_KEY": "your-anthropic-key",
-        "GEMINI_API_KEY": "your-gemini-key",
-        "DEFAULT_MODEL": "auto"
+        "OPENAI_API_KEY": "<OPENAI_API_KEY>",
+        "ANTHROPIC_API_KEY": "<ANTHROPIC_API_KEY>",
+        "GEMINI_API_KEY": "<GEMINI_API_KEY>"
       }
     }
   }
 }
 ```
 
-Set at least one API key. You can also override defaults:
+Copy-and-paste prompt:
+
+```text
+Add the AI Mates MCP server to my user-level Claude Code MCP config.
+
+Use this config, replacing only the API key placeholders with my real keys. Keep
+any provider I leave blank out of the final env block.
+
+{
+  "mcpServers": {
+    "mates": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/petems/ai-mates-mcp-server.git",
+        "ai-mates-mcp-server"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "<OPENAI_API_KEY>",
+        "ANTHROPIC_API_KEY": "<ANTHROPIC_API_KEY>",
+        "GEMINI_API_KEY": "<GEMINI_API_KEY>"
+      }
+    }
+  }
+}
+```
+
+### Codex CLI
+
+Codex CLI uses TOML in `~/.codex/config.toml`, not `mcp.json`:
+
+```toml
+[mcp_servers.mates]
+command = "uvx"
+args = [
+  "--from",
+  "git+https://github.com/petems/ai-mates-mcp-server.git",
+  "ai-mates-mcp-server",
+]
+
+[mcp_servers.mates.env]
+OPENAI_API_KEY = "<OPENAI_API_KEY>"
+ANTHROPIC_API_KEY = "<ANTHROPIC_API_KEY>"
+GEMINI_API_KEY = "<GEMINI_API_KEY>"
+```
+
+Copy-and-paste prompt:
+
+```text
+Add the AI Mates MCP server to my user-level Codex CLI config at
+~/.codex/config.toml.
+
+Use this TOML config, replacing only the API key placeholders with my real keys.
+Keep any provider I leave blank out of the final env block.
+
+[mcp_servers.mates]
+command = "uvx"
+args = [
+  "--from",
+  "git+https://github.com/petems/ai-mates-mcp-server.git",
+  "ai-mates-mcp-server",
+]
+
+[mcp_servers.mates.env]
+OPENAI_API_KEY = "<OPENAI_API_KEY>"
+ANTHROPIC_API_KEY = "<ANTHROPIC_API_KEY>"
+GEMINI_API_KEY = "<GEMINI_API_KEY>"
+```
+
+### Gemini CLI
+
+Add this to your user-level Gemini CLI settings at `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "mates": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/petems/ai-mates-mcp-server.git",
+        "ai-mates-mcp-server"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "<OPENAI_API_KEY>",
+        "ANTHROPIC_API_KEY": "<ANTHROPIC_API_KEY>",
+        "GEMINI_API_KEY": "<GEMINI_API_KEY>"
+      }
+    }
+  }
+}
+```
+
+Copy-and-paste prompt:
+
+```text
+Add the AI Mates MCP server to my user-level Gemini CLI settings at
+~/.gemini/settings.json.
+
+Use this config, replacing only the API key placeholders with my real keys. Keep
+any provider I leave blank out of the final env block.
+
+{
+  "mcpServers": {
+    "mates": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/petems/ai-mates-mcp-server.git",
+        "ai-mates-mcp-server"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "<OPENAI_API_KEY>",
+        "ANTHROPIC_API_KEY": "<ANTHROPIC_API_KEY>",
+        "GEMINI_API_KEY": "<GEMINI_API_KEY>"
+      }
+    }
+  }
+}
+```
+
+You can also override defaults:
 
 ```bash
-OPENAI_MODEL=gpt-4.1
-ANTHROPIC_MODEL=claude-sonnet-4-5
-GEMINI_MODEL=gemini-2.5-pro
-DEFAULT_MODEL=auto
+export OPENAI_MODEL=gpt-4.1
+export ANTHROPIC_MODEL=claude-sonnet-4-5
+export GEMINI_MODEL=gemini-2.5-pro
+export DEFAULT_MODEL=auto
 ```
 
 ## Tools
