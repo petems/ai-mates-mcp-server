@@ -19,3 +19,39 @@ async def test_mcp_lists_core_tools():
 
     names = {tool.name for tool in tools.tools}
     assert names == {"planner", "consensus", "codereview", "listmodels"}
+
+    annotations = {
+        tool.name: tool.annotations.model_dump(exclude_none=True)
+        for tool in tools.tools
+        if tool.annotations
+    }
+    assert annotations == {
+        "planner": {
+            "title": "Planner",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+        "consensus": {
+            "title": "Consensus",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
+        "codereview": {
+            "title": "Code Review",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
+        "listmodels": {
+            "title": "List Models",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    }
