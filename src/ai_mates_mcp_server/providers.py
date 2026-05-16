@@ -290,9 +290,8 @@ class ProviderRegistry:
         }
 
     def _provider_default(self, provider_name: ProviderName) -> str:
-        return (
-            self.model_registry.default_for_provider(provider_name)
-            or getattr(self.settings, f"{provider_name}_model")
+        return self.model_registry.default_for_provider(provider_name) or getattr(
+            self.settings, f"{provider_name}_model"
         )
 
 

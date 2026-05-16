@@ -44,15 +44,11 @@ class ModelEntry:
         if raw_aliases is None:
             raw_aliases = []
         if not isinstance(raw_aliases, (list, tuple)):
-            raise ModelRegistryError(
-                f"Model entry aliases for '{model_id}' must be an array"
-            )
+            raise ModelRegistryError(f"Model entry aliases for '{model_id}' must be an array")
         aliases = []
         for alias in raw_aliases:
             if not isinstance(alias, str):
-                raise ModelRegistryError(
-                    f"Model entry aliases for '{model_id}' must be strings"
-                )
+                raise ModelRegistryError(f"Model entry aliases for '{model_id}' must be strings")
             if alias.strip():
                 aliases.append(_normalize_key(alias))
         return cls(
@@ -214,7 +210,6 @@ def _normalize_key(value: str) -> str:
 def _validate_default_model_id(provider: str, model_id: Any, *, source: str) -> str:
     if not isinstance(model_id, str) or not model_id.strip():
         raise ModelRegistryError(
-            f"Invalid default model id for provider '{provider}' in {source} data: "
-            f"{model_id!r}"
+            f"Invalid default model id for provider '{provider}' in {source} data: {model_id!r}"
         )
     return model_id.strip()
