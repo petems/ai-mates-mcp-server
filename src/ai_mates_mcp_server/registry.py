@@ -1,0 +1,188 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, replace
+from importlib.resources import files
+from pathlib import Path
+from typing import Any
+
+from .models import ProviderName
+
+ACTIVE_STATUSES = {"active", "preview"}
+DEPRECATED_STATUSES = {"deprecated", "shutdown", "retired"}
+
+
+class ModelRegistryError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class ModelEntry:
+    id: str
+    provider: ProviderName
+    aliases: tuple[str, ...] = ()
+    rank: int = 0
+    status: str = "active"
+    source: str = "packaged"
+    live_discovered: bool = False
+    description: str | None = None
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any], *, source: str) -> ModelEntry:
+        try:
+            model_id = str(data["id"]).strip()
+            provider = str(data["provider"]).strip().lower()
+        except KeyError as exc:
+            raise ModelRegistryError(f"Model entry missing required field: {exc.args[0]}") from exc
+
+        if provider not in {"openai", "anthropic", "gemini"}:
+            raise ModelRegistryError(f"Unsupported provider for model '{model_id}': {provider}")
+        if not model_id:
+            raise ModelRegistryError("Model entry id cannot be empty")
+
+        aliases = tuple(
+            _normalize_key(alias)
+            for alias in data.get("aliases", [])
+            if str(alias).strip()
+        )
+        return cls(
+            id=model_id,
+            provider=provider,  # type: ignore[arg-type]
+            aliases=aliases,
+            rank=int(data.get("rank", 0)),
+            status=str(data.get("status", "active")).strip().lower(),
+            source=source,
+            description=data.get("description"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "provider": self.provider,
+            "aliases": list(self.aliases),
+            "rank": self.rank,
+            "status": self.status,
+            "source": self.source,
+            "live_discovered": self.live_discovered,
+            "description": self.description,
+        }
+
+
+class ModelRegistry:
+    def __init__(
+        self,
+        *,
+        local_models_file: str | None = None,
+        provider_defaults: dict[ProviderName, str] | None = None,
+        allow_deprecated: bool = False,
+    ) -> None:
+        self.allow_deprecated = allow_deprecated
+        self.entries: dict[str, ModelEntry] = {}
+        self.aliases: dict[str, str] = {}
+        self.defaults: dict[ProviderName, str] = {}
+        self._load_packaged()
+        if local_models_file:
+            self._load_file(Path(local_models_file).expanduser(), source="local")
+        if provider_defaults:
+            for provider, model_id in provider_defaults.items():
+                if model_id:
+                    self.defaults[provider] = model_id
+
+    def resolve(self, model: str) -> ModelEntry | None:
+        key = _normalize_key(model)
+        entry = self.entries.get(key)
+        if not entry:
+            target = self.aliases.get(key)
+            entry = self.entries.get(target) if target else None
+        if entry:
+            self._validate_status(entry)
+        return entry
+
+    def default_for_provider(self, provider: ProviderName) -> str | None:
+        model_id = self.defaults.get(provider)
+        if not model_id:
+            return None
+        entry = self.resolve(model_id)
+        return entry.id if entry else model_id
+
+    def provider_aliases(self) -> dict[ProviderName, str]:
+        return dict(self.defaults)
+
+    def add_live_model(self, provider: ProviderName, model_id: str) -> None:
+        key = _normalize_key(model_id)
+        if key in self.entries:
+            self.entries[key] = replace(self.entries[key], live_discovered=True)
+            return
+        self.entries[key] = ModelEntry(
+            id=model_id,
+            provider=provider,
+            rank=0,
+            status="active",
+            source="live",
+            live_discovered=True,
+        )
+
+    def list_entries(
+        self,
+        configured_providers: set[ProviderName] | None = None,
+    ) -> list[dict[str, Any]]:
+        rows = []
+        for entry in self.entries.values():
+            row = entry.to_dict()
+            row["configured"] = (
+                entry.provider in configured_providers if configured_providers is not None else None
+            )
+            row["is_default"] = self.defaults.get(entry.provider) == entry.id
+            rows.append(row)
+        rows.sort(key=lambda item: (item["provider"], -item["rank"], item["id"]))
+        return rows
+
+    def _load_packaged(self) -> None:
+        data_path = files("ai_mates_mcp_server").joinpath("data/models.json")
+        data = json.loads(data_path.read_text(encoding="utf-8"))
+        self._merge_data(data, source="packaged")
+
+    def _load_file(self, path: Path, *, source: str) -> None:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise ModelRegistryError(f"Could not read model registry file '{path}': {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise ModelRegistryError(
+                f"Invalid JSON in model registry file '{path}': {exc}"
+            ) from exc
+        self._merge_data(data, source=source)
+
+    def _merge_data(self, data: dict[str, Any], *, source: str) -> None:
+        for provider, model_id in data.get("defaults", {}).items():
+            normalized_provider = provider.strip().lower()
+            if normalized_provider in {"openai", "anthropic", "gemini"}:
+                self.defaults[normalized_provider] = model_id
+
+        for raw_entry in data.get("models", []):
+            entry = ModelEntry.from_mapping(raw_entry, source=source)
+            key = _normalize_key(entry.id)
+            old_entry = self.entries.get(key)
+            if old_entry:
+                for alias in old_entry.aliases:
+                    if self.aliases.get(alias) == key:
+                        del self.aliases[alias]
+            self.entries[key] = entry
+            self.aliases[key] = key
+            for alias in entry.aliases:
+                self.aliases[alias] = key
+
+    def _validate_status(self, entry: ModelEntry) -> None:
+        if entry.status in ACTIVE_STATUSES:
+            return
+        if entry.status in DEPRECATED_STATUSES and self.allow_deprecated:
+            return
+        if entry.status in DEPRECATED_STATUSES:
+            raise ModelRegistryError(
+                f"Model '{entry.id}' is marked {entry.status}. "
+                "Set MATES_ALLOW_DEPRECATED_MODELS=true to use it anyway."
+            )
+
+
+def _normalize_key(value: str) -> str:
+    return value.strip().lower()

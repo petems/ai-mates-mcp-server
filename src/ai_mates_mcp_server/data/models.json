@@ -1,0 +1,202 @@
+{
+  "defaults": {
+    "openai": "gpt-5.5",
+    "anthropic": "claude-sonnet-4-6",
+    "gemini": "gemini-3.1-pro-preview"
+  },
+  "models": [
+    {
+      "id": "gpt-5.5",
+      "provider": "openai",
+      "aliases": ["openai", "gpt", "best", "reasoning"],
+      "rank": 100,
+      "status": "active",
+      "description": "OpenAI flagship model for complex reasoning and coding."
+    },
+    {
+      "id": "gpt-5.5-pro",
+      "provider": "openai",
+      "aliases": ["gpt-pro", "openai-pro"],
+      "rank": 98,
+      "status": "active"
+    },
+    {
+      "id": "gpt-5.4",
+      "provider": "openai",
+      "aliases": ["gpt-balanced"],
+      "rank": 90,
+      "status": "active"
+    },
+    {
+      "id": "gpt-5.4-pro",
+      "provider": "openai",
+      "aliases": ["gpt-5.4-deep"],
+      "rank": 89,
+      "status": "active"
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "provider": "openai",
+      "aliases": ["mini", "openai-mini"],
+      "rank": 82,
+      "status": "active"
+    },
+    {
+      "id": "gpt-5.4-nano",
+      "provider": "openai",
+      "aliases": ["nano", "openai-nano"],
+      "rank": 75,
+      "status": "active"
+    },
+    {
+      "id": "gpt-5-mini",
+      "provider": "openai",
+      "aliases": ["gpt5-mini"],
+      "rank": 70,
+      "status": "active"
+    },
+    {
+      "id": "gpt-5-nano",
+      "provider": "openai",
+      "aliases": ["gpt5-nano"],
+      "rank": 65,
+      "status": "active"
+    },
+    {
+      "id": "gpt-5",
+      "provider": "openai",
+      "aliases": ["gpt5"],
+      "rank": 80,
+      "status": "active"
+    },
+    {
+      "id": "gpt-4.1",
+      "provider": "openai",
+      "aliases": ["gpt4.1"],
+      "rank": 60,
+      "status": "active"
+    },
+    {
+      "id": "gpt-4.1-nano",
+      "provider": "openai",
+      "aliases": [],
+      "rank": 0,
+      "status": "deprecated"
+    },
+    {
+      "id": "o4-mini",
+      "provider": "openai",
+      "aliases": [],
+      "rank": 0,
+      "status": "deprecated"
+    },
+    {
+      "id": "claude-opus-4-7",
+      "provider": "anthropic",
+      "aliases": ["opus", "claude-opus", "anthropic-deep"],
+      "rank": 100,
+      "status": "active",
+      "description": "Anthropic most capable generally available model."
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "provider": "anthropic",
+      "aliases": ["anthropic", "claude", "sonnet", "claude-sonnet"],
+      "rank": 95,
+      "status": "active",
+      "description": "Anthropic best speed and intelligence balance."
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "provider": "anthropic",
+      "aliases": ["haiku", "claude-fast"],
+      "rank": 80,
+      "status": "active"
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "provider": "anthropic",
+      "aliases": ["haiku-pinned"],
+      "rank": 79,
+      "status": "active"
+    },
+    {
+      "id": "claude-3-opus-20240229",
+      "provider": "anthropic",
+      "aliases": [],
+      "rank": 0,
+      "status": "retired"
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "provider": "gemini",
+      "aliases": ["gemini", "pro", "gemini-pro", "gemini-deep"],
+      "rank": 100,
+      "status": "preview",
+      "description": "Gemini 3.1 Pro Preview for complex reasoning and agentic workflows."
+    },
+    {
+      "id": "gemini-3.1-pro-preview-customtools",
+      "provider": "gemini",
+      "aliases": ["gemini-tools", "pro-tools"],
+      "rank": 99,
+      "status": "preview"
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "provider": "gemini",
+      "aliases": ["flash", "gemini-flash"],
+      "rank": 90,
+      "status": "preview"
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "provider": "gemini",
+      "aliases": ["gemini-lite", "flash-lite"],
+      "rank": 85,
+      "status": "active"
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "provider": "gemini",
+      "aliases": ["gemini-2.5-deep"],
+      "rank": 80,
+      "status": "active"
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "provider": "gemini",
+      "aliases": ["gemini-2.5-flash"],
+      "rank": 75,
+      "status": "active"
+    },
+    {
+      "id": "gemini-2.5-flash-lite",
+      "provider": "gemini",
+      "aliases": ["gemini-2.5-lite"],
+      "rank": 70,
+      "status": "active"
+    },
+    {
+      "id": "gemini-3-pro-preview",
+      "provider": "gemini",
+      "aliases": [],
+      "rank": 0,
+      "status": "shutdown"
+    },
+    {
+      "id": "gemini-2.0-flash",
+      "provider": "gemini",
+      "aliases": [],
+      "rank": 0,
+      "status": "deprecated"
+    },
+    {
+      "id": "gemini-2.0-flash-lite",
+      "provider": "gemini",
+      "aliases": [],
+      "rank": 0,
+      "status": "deprecated"
+    }
+  ]
+}

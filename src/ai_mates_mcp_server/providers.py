@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 
 from .config import DEFAULT_MAX_TOKENS, Settings, load_settings
 from .models import ProviderName, ProviderResponse
+from .registry import ModelRegistry, ModelRegistryError
 
 
 class ProviderError(RuntimeError):
@@ -34,6 +35,10 @@ class ModelProvider(ABC):
         temperature: float = 0.2,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> ProviderResponse:
+        pass
+
+    @abstractmethod
+    async def list_model_ids(self) -> list[str]:
         pass
 
 
@@ -80,6 +85,10 @@ class OpenAIProvider(ModelProvider):
 
         return ProviderResponse(provider=self.name, model=model_name, content=content, usage=usage)
 
+    async def list_model_ids(self) -> list[str]:
+        response = await self.client.models.list()
+        return sorted(model.id for model in response.data)
+
 
 class AnthropicProvider(ModelProvider):
     name: ProviderName = "anthropic"
@@ -114,6 +123,11 @@ class AnthropicProvider(ModelProvider):
             content="\n".join(text_parts),
             usage=_dump_usage(getattr(response, "usage", None)),
         )
+
+    async def list_model_ids(self) -> list[str]:
+        response = await self.client.models.list()
+        data = getattr(response, "data", response)
+        return sorted(model.id for model in data)
 
 
 class GeminiProvider(ModelProvider):
@@ -154,33 +168,51 @@ class GeminiProvider(ModelProvider):
             usage=_dump_usage(getattr(response, "usage_metadata", None)),
         )
 
+    async def list_model_ids(self) -> list[str]:
+        def call() -> list[str]:
+            model_ids: list[str] = []
+            for model in self.client.models.list():
+                name = getattr(model, "name", "")
+                if name.startswith("models/"):
+                    name = name.removeprefix("models/")
+                if name:
+                    model_ids.append(name)
+            return sorted(set(model_ids))
+
+        return await asyncio.to_thread(call)
+
 
 class ProviderRegistry:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or load_settings()
+        self.model_registry = ModelRegistry(
+            local_models_file=self.settings.models_file,
+            provider_defaults={
+                "openai": self.settings.openai_model,
+                "anthropic": self.settings.anthropic_model,
+                "gemini": self.settings.gemini_model,
+            },
+            allow_deprecated=self.settings.allow_deprecated_models,
+        )
         self.providers: dict[ProviderName, ModelProvider] = {}
         if self.settings.openai_api_key:
             self.providers["openai"] = OpenAIProvider(
                 self.settings.openai_api_key,
-                self.settings.openai_model,
+                self._provider_default("openai"),
             )
         if self.settings.anthropic_api_key:
             self.providers["anthropic"] = AnthropicProvider(
                 self.settings.anthropic_api_key,
-                self.settings.anthropic_model,
+                self._provider_default("anthropic"),
             )
         if self.settings.gemini_api_key:
             self.providers["gemini"] = GeminiProvider(
                 self.settings.gemini_api_key,
-                self.settings.gemini_model,
+                self._provider_default("gemini"),
             )
 
     def available_models(self) -> dict[str, str]:
-        models: dict[str, str] = {}
-        for provider_name, provider in self.providers.items():
-            models[provider_name] = provider.default_model
-            models[provider.default_model] = provider_name
-        return models
+        return self.model_registry.provider_aliases()
 
     def resolve(self, model: str | None = None) -> tuple[ModelProvider, str]:
         requested = model or self.settings.default_model
@@ -195,9 +227,26 @@ class ProviderRegistry:
             )
 
         normalized = requested.lower()
-        if normalized in self.providers:
-            provider = self.providers[normalized]  # type: ignore[index]
-            return provider, provider.default_model
+        if normalized in {"openai", "anthropic", "gemini"}:
+            provider_name = normalized  # type: ignore[assignment]
+            default_model = self.model_registry.default_for_provider(provider_name)
+            if not default_model and provider_name in self.providers:
+                default_model = self.providers[provider_name].default_model
+            if not default_model:
+                configured = ", ".join(sorted(self.available_models())) or "none"
+                raise ProviderError(
+                    f"Cannot route provider alias '{requested}'. Configured models/providers: "
+                    f"{configured}"
+                )
+            return self._resolve_provider_model(provider_name, default_model)
+
+        try:
+            registry_entry = self.model_registry.resolve(requested)
+        except ModelRegistryError as exc:
+            raise ProviderError(str(exc)) from exc
+        if registry_entry:
+            return self._resolve_provider_model(registry_entry.provider, registry_entry.id)
+
         if normalized.startswith(("gpt-", "o1", "o3", "o4")):
             return self._resolve_provider_model("openai", requested)
         if normalized.startswith("claude"):
@@ -221,6 +270,30 @@ class ProviderRegistry:
                 f"Model '{model}' requires {provider_name}, but that provider is not configured."
             )
         return provider, model
+
+    async def list_models(self) -> dict[str, Any]:
+        live_errors: dict[str, str] = {}
+        if self.settings.model_discovery == "list":
+            for provider_name, provider in self.providers.items():
+                try:
+                    for model_id in await provider.list_model_ids():
+                        self.model_registry.add_live_model(provider_name, model_id)
+                except Exception as exc:
+                    live_errors[provider_name] = str(exc)
+
+        return {
+            "defaults": self.model_registry.provider_aliases(),
+            "configured_providers": sorted(self.providers),
+            "discovery": self.settings.model_discovery,
+            "live_errors": live_errors,
+            "models": self.model_registry.list_entries(set(self.providers)),
+        }
+
+    def _provider_default(self, provider_name: ProviderName) -> str:
+        return (
+            self.model_registry.default_for_provider(provider_name)
+            or getattr(self.settings, f"{provider_name}_model")
+        )
 
 
 def _extract_openai_response_text(response: Any) -> str:

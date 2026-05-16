@@ -18,4 +18,4 @@ async def test_mcp_lists_core_tools():
             tools = await session.list_tools()
 
     names = {tool.name for tool in tools.tools}
-    assert names == {"planner", "consensus", "codereview"}
+    assert names == {"planner", "consensus", "codereview", "listmodels"}

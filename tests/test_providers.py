@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from ai_mates_mcp_server.config import Settings
@@ -17,6 +19,9 @@ def settings(**overrides):
         "gemini_model": "gemini-2.5-pro",
         "conversation_ttl_seconds": 60,
         "max_context_chars": 1000,
+        "models_file": None,
+        "model_discovery": "off",
+        "allow_deprecated_models": False,
     }
     base.update(overrides)
     return Settings(**base)
@@ -43,3 +48,128 @@ def test_no_configured_providers_errors():
 
     with pytest.raises(ProviderError):
         registry.resolve("auto")
+
+
+def test_packaged_alias_resolves_to_current_model():
+    registry = ProviderRegistry(settings(gemini_api_key="gemini-key"))
+
+    provider, model = registry.resolve("pro")
+
+    assert provider.name == "gemini"
+    assert model == "gemini-3.1-pro-preview"
+
+
+def test_provider_alias_uses_env_default_over_packaged_alias():
+    registry = ProviderRegistry(settings(openai_model="gpt-4.1"))
+
+    provider, model = registry.resolve("openai")
+
+    assert provider.name == "openai"
+    assert model == "gpt-4.1"
+
+
+def test_local_config_adds_model_without_code_change(tmp_path):
+    models_file = tmp_path / "mates-models.json"
+    models_file.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "id": "gpt-6-test",
+                        "provider": "openai",
+                        "aliases": ["future-openai"],
+                        "rank": 200,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = ProviderRegistry(settings(models_file=str(models_file)))
+
+    provider, model = registry.resolve("future-openai")
+
+    assert provider.name == "openai"
+    assert model == "gpt-6-test"
+
+
+def test_local_alias_overrides_packaged_alias(tmp_path):
+    models_file = tmp_path / "mates-models.json"
+    models_file.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "id": "gpt-5.4-mini",
+                        "provider": "openai",
+                        "aliases": ["sonnet"],
+                        "rank": 300,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = ProviderRegistry(settings(models_file=str(models_file)))
+
+    provider, model = registry.resolve("sonnet")
+
+    assert provider.name == "openai"
+    assert model == "gpt-5.4-mini"
+
+
+def test_deprecated_models_error_by_default():
+    registry = ProviderRegistry(settings())
+
+    with pytest.raises(ProviderError, match="deprecated"):
+        registry.resolve("gpt-4.1-nano")
+
+
+def test_deprecated_models_can_be_allowed():
+    registry = ProviderRegistry(settings(allow_deprecated_models=True))
+
+    provider, model = registry.resolve("gpt-4.1-nano")
+
+    assert provider.name == "openai"
+    assert model == "gpt-4.1-nano"
+
+
+def test_prefix_fallback_accepts_unknown_clearly_routable_model():
+    registry = ProviderRegistry(settings())
+
+    provider, model = registry.resolve("gpt-6-new")
+
+    assert provider.name == "openai"
+    assert model == "gpt-6-new"
+
+
+@pytest.mark.asyncio
+async def test_live_discovery_augments_listmodels_when_enabled():
+    class FakeLiveProvider:
+        async def list_model_ids(self):
+            return ["gpt-live-model"]
+
+    registry = ProviderRegistry(settings(model_discovery="list"))
+    registry.providers["openai"] = FakeLiveProvider()  # type: ignore[assignment]
+
+    result = await registry.list_models()
+
+    live_models = [model for model in result["models"] if model["id"] == "gpt-live-model"]
+    assert live_models
+    assert live_models[0]["source"] == "live"
+    assert live_models[0]["live_discovered"] is True
+
+
+@pytest.mark.asyncio
+async def test_live_discovery_failures_are_reported_without_failing():
+    class FailingLiveProvider:
+        async def list_model_ids(self):
+            raise RuntimeError("nope")
+
+    registry = ProviderRegistry(settings(model_discovery="list"))
+    registry.providers["openai"] = FailingLiveProvider()  # type: ignore[assignment]
+
+    result = await registry.list_models()
+
+    assert result["live_errors"]["openai"] == "nope"
+    assert result["models"]

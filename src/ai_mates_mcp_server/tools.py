@@ -244,12 +244,13 @@ async def run_codereview(
     return envelope.model_dump_json(indent=2)
 
 
-def run_listmodels(registry: ProviderRegistry | None = None) -> str:
+async def run_listmodels(registry: ProviderRegistry | None = None) -> str:
     provider_registry = registry or ProviderRegistry()
-    data = {
-        "available": provider_registry.available_models(),
-        "note": "Use provider aliases openai, anthropic, gemini or an explicit model name.",
-    }
+    data = await provider_registry.list_models()
+    data["note"] = (
+        "Use provider aliases openai, anthropic, gemini, configured aliases like "
+        "sonnet/pro/flash, or an explicit model name."
+    )
     return json.dumps(data, indent=2)
 
 

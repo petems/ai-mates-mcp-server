@@ -4,7 +4,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from .tools import run_codereview, run_consensus, run_planner, tool_error
+from .tools import run_codereview, run_consensus, run_listmodels, run_planner, tool_error
 
 mcp = FastMCP("AI Mates")
 
@@ -96,6 +96,15 @@ async def codereview(
             use_assistant_model=use_assistant_model,
             continuation_id=continuation_id,
         )
+    except Exception as exc:
+        return tool_error(exc)
+
+
+@mcp.tool()
+async def listmodels() -> str:
+    """List configured model aliases, defaults, statuses, and optional live discovery data."""
+    try:
+        return await run_listmodels()
     except Exception as exc:
         return tool_error(exc)
 
