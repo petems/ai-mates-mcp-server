@@ -56,6 +56,10 @@ class ConsensusRequest(BaseModel):
     models: list[ModelConfig]
     initial_analysis: str | None = Field(None, description="Your own neutral analysis.")
     relevant_files: list[str] = Field(default_factory=list)
+    workspace_root: str | None = Field(
+        None,
+        description="Workspace directory that bounds relevant_files access.",
+    )
     continuation_id: str | None = None
 
     @field_validator("models")
@@ -76,6 +80,10 @@ class CodeReviewRequest(BaseModel):
     step: str = Field(..., description="Review request or current review narrative.")
     findings: str = Field("", description="Findings gathered so far.")
     relevant_files: list[str] = Field(default_factory=list)
+    workspace_root: str | None = Field(
+        None,
+        description="Workspace directory that bounds relevant_files access.",
+    )
     files_checked: list[str] = Field(default_factory=list)
     relevant_context: list[str] = Field(default_factory=list)
     issues_found: list[Issue] = Field(default_factory=list)

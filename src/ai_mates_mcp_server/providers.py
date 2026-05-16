@@ -32,7 +32,7 @@ class ModelProvider(ABC):
         *,
         model: str | None = None,
         system_prompt: str | None = None,
-        temperature: float = 0.2,
+        temperature: float | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> ProviderResponse:
         pass
@@ -55,18 +55,21 @@ class OpenAIProvider(ModelProvider):
         *,
         model: str | None = None,
         system_prompt: str | None = None,
-        temperature: float = 0.2,
+        temperature: float | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> ProviderResponse:
         model_name = model or self.default_model
         try:
-            response = await self.client.responses.create(
-                model=model_name,
-                input=prompt,
-                instructions=system_prompt,
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-            )
+            kwargs: dict[str, Any] = {
+                "model": model_name,
+                "input": prompt,
+                "max_output_tokens": max_tokens,
+            }
+            if system_prompt:
+                kwargs["instructions"] = system_prompt
+            if temperature is not None:
+                kwargs["temperature"] = temperature
+            response = await self.client.responses.create(**kwargs)
             content = _extract_openai_response_text(response)
             usage = _dump_usage(getattr(response, "usage", None))
         except AttributeError:
@@ -74,12 +77,14 @@ class OpenAIProvider(ModelProvider):
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
-            response = await self.client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            kwargs = {
+                "model": model_name,
+                "messages": messages,
+                "max_tokens": max_tokens,
+            }
+            if temperature is not None:
+                kwargs["temperature"] = temperature
+            response = await self.client.chat.completions.create(**kwargs)
             content = response.choices[0].message.content or ""
             usage = _dump_usage(getattr(response, "usage", None))
 
@@ -103,17 +108,20 @@ class AnthropicProvider(ModelProvider):
         *,
         model: str | None = None,
         system_prompt: str | None = None,
-        temperature: float = 0.2,
+        temperature: float | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> ProviderResponse:
         model_name = model or self.default_model
-        response = await self.client.messages.create(
-            model=model_name,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        kwargs: dict[str, Any] = {
+            "model": model_name,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system_prompt:
+            kwargs["system"] = system_prompt
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        response = await self.client.messages.create(**kwargs)
         text_parts = [
             block.text for block in response.content if getattr(block, "type", None) == "text"
         ]
@@ -143,17 +151,18 @@ class GeminiProvider(ModelProvider):
         *,
         model: str | None = None,
         system_prompt: str | None = None,
-        temperature: float = 0.2,
+        temperature: float | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> ProviderResponse:
         model_name = model or self.default_model
 
         def call() -> Any:
-            config = genai_types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-                system_instruction=system_prompt,
-            )
+            kwargs: dict[str, Any] = {"max_output_tokens": max_tokens}
+            if system_prompt:
+                kwargs["system_instruction"] = system_prompt
+            if temperature is not None:
+                kwargs["temperature"] = temperature
+            config = genai_types.GenerateContentConfig(**kwargs)
             return self.client.models.generate_content(
                 model=model_name,
                 contents=prompt,

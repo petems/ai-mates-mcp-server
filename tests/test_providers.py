@@ -5,7 +5,13 @@ import json
 import pytest
 
 from ai_mates_mcp_server.config import Settings
-from ai_mates_mcp_server.providers import ProviderError, ProviderRegistry
+from ai_mates_mcp_server.providers import (
+    AnthropicProvider,
+    GeminiProvider,
+    OpenAIProvider,
+    ProviderError,
+    ProviderRegistry,
+)
 from ai_mates_mcp_server.registry import ModelEntry, ModelRegistry, ModelRegistryError
 
 
@@ -218,3 +224,78 @@ async def test_live_discovery_failures_are_reported_without_failing():
 
     assert result["live_errors"]["openai"] == "nope"
     assert result["models"]
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_omits_temperature_by_default():
+    class FakeResponses:
+        def __init__(self):
+            self.calls = []
+
+        async def create(self, **kwargs):
+            self.calls.append(kwargs)
+            return type("Response", (), {"output_text": "ok", "usage": {"tokens": 1}})()
+
+    class FakeClient:
+        def __init__(self):
+            self.responses = FakeResponses()
+
+    provider = OpenAIProvider("key", "gpt-5.5")
+    fake_client = FakeClient()
+    provider.client = fake_client  # type: ignore[assignment]
+
+    await provider.complete("hello", system_prompt="system")
+
+    assert "temperature" not in fake_client.responses.calls[0]
+    assert fake_client.responses.calls[0]["instructions"] == "system"
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_omits_temperature_by_default():
+    class FakeMessages:
+        def __init__(self):
+            self.calls = []
+
+        async def create(self, **kwargs):
+            self.calls.append(kwargs)
+            block = type("Block", (), {"type": "text", "text": "ok"})()
+            return type("Response", (), {"content": [block], "usage": {"tokens": 1}})()
+
+    class FakeClient:
+        def __init__(self):
+            self.messages = FakeMessages()
+
+    provider = AnthropicProvider("key", "claude-opus-4-7")
+    fake_client = FakeClient()
+    provider.client = fake_client  # type: ignore[assignment]
+
+    await provider.complete("hello", system_prompt="system")
+
+    assert "temperature" not in fake_client.messages.calls[0]
+    assert fake_client.messages.calls[0]["system"] == "system"
+
+
+@pytest.mark.asyncio
+async def test_gemini_provider_omits_temperature_by_default():
+    class FakeModels:
+        def __init__(self):
+            self.calls = []
+
+        def generate_content(self, **kwargs):
+            self.calls.append(kwargs)
+            return type("Response", (), {"text": "ok", "usage_metadata": {"tokens": 1}})()
+
+    class FakeClient:
+        def __init__(self):
+            self.models = FakeModels()
+
+    provider = GeminiProvider("key", "gemini-3.1-pro-preview")
+    fake_client = FakeClient()
+    provider.client = fake_client  # type: ignore[assignment]
+
+    await provider.complete("hello", system_prompt="system")
+
+    config = fake_client.models.calls[0]["config"]
+    dumped = config.model_dump(exclude_none=True)
+    assert "temperature" not in dumped
+    assert dumped["system_instruction"] == "system"

@@ -48,6 +48,7 @@ async def consensus(
     models: list[dict[str, Any]],
     initial_analysis: str | None = None,
     relevant_files: list[str] | None = None,
+    workspace_root: str | None = None,
     continuation_id: str | None = None,
 ) -> str:
     """Consult multiple OpenAI, Anthropic, or Gemini models and return their perspectives."""
@@ -57,6 +58,7 @@ async def consensus(
             models=models,
             initial_analysis=initial_analysis,
             relevant_files=relevant_files,
+            workspace_root=workspace_root,
             continuation_id=continuation_id,
         )
     except Exception as exc:
@@ -68,6 +70,7 @@ async def codereview(
     step: str,
     findings: str = "",
     relevant_files: list[str] | None = None,
+    workspace_root: str | None = None,
     files_checked: list[str] | None = None,
     relevant_context: list[str] | None = None,
     issues_found: list[dict[str, Any]] | None = None,
@@ -85,6 +88,7 @@ async def codereview(
             step=step,
             findings=findings,
             relevant_files=relevant_files,
+            workspace_root=workspace_root,
             files_checked=files_checked,
             relevant_context=relevant_context,
             issues_found=issues_found,
