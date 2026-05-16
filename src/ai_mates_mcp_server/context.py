@@ -56,6 +56,13 @@ SENSITIVE_PATH_PATTERNS = (
     "*.key",
 )
 
+SENSITIVE_ROOT_DIRS = {
+    ".aws",
+    ".gnupg",
+    ".kube",
+    ".ssh",
+}
+
 MAX_FILE_BYTES = 1_000_000
 
 
@@ -117,6 +124,8 @@ def _resolve_workspace_root(raw_root: str) -> Path:
         raise ValueError(f"{root} is a protected system path")
     if _is_home_root(root):
         raise ValueError(f"{root} is a home directory root; choose a project subdirectory")
+    if _is_sensitive_workspace_root(root):
+        raise ValueError(f"{root} is a sensitive directory; choose a project subdirectory")
     return root
 
 
@@ -227,6 +236,11 @@ def _is_home_root(path: Path) -> bool:
     except OSError:
         return False
     return path == home
+
+
+def _is_sensitive_workspace_root(path: Path) -> bool:
+    lowered_parts = {part.lower() for part in path.parts}
+    return bool(lowered_parts & SENSITIVE_ROOT_DIRS)
 
 
 def _is_sensitive_path(path: Path, root: Path) -> bool:

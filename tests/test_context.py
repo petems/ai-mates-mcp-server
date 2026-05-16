@@ -90,3 +90,15 @@ def test_file_size_cap_blocks_large_file(tmp_path):
 
     assert "file too large" in result
     assert "x" * 100 not in result
+
+
+def test_blocks_sensitive_directory_as_workspace_root(tmp_path):
+    sensitive_root = tmp_path / ".aws"
+    sensitive_root.mkdir()
+    (sensitive_root / "config").write_text("aws-secret-key=top-secret", encoding="utf-8")
+
+    result = read_relevant_files(["config"], str(sensitive_root))
+
+    assert "blocked: invalid workspace root" in result
+    assert "sensitive directory" in result
+    assert "top-secret" not in result
