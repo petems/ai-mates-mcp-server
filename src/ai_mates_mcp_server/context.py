@@ -63,6 +63,20 @@ SENSITIVE_ROOT_DIRS = {
     ".ssh",
 }
 
+# Directory names that must never appear as a component of a requested path,
+# at any depth, regardless of where the workspace root is anchored.
+SENSITIVE_DIR_COMPONENTS = {
+    ".aws",
+    ".gnupg",
+    ".kube",
+    ".ssh",
+}
+
+# Consecutive directory components that together identify a sensitive location.
+SENSITIVE_DIR_SEQUENCES = (
+    (".config", "gcloud"),
+)
+
 MAX_FILE_BYTES = 1_000_000
 
 
@@ -246,9 +260,18 @@ def _is_sensitive_workspace_root(path: Path) -> bool:
 
 
 def _is_sensitive_path(path: Path, root: Path) -> bool:
-    relative = path.relative_to(root).as_posix()
+    relative = path.relative_to(root)
+    lowered_parts = [part.lower() for part in relative.parts]
+    if SENSITIVE_DIR_COMPONENTS.intersection(lowered_parts):
+        return True
+    for sequence in SENSITIVE_DIR_SEQUENCES:
+        width = len(sequence)
+        for index in range(len(lowered_parts) - width + 1):
+            if tuple(lowered_parts[index : index + width]) == sequence:
+                return True
+    relative_posix = relative.as_posix()
     name = path.name
     for pattern in SENSITIVE_PATH_PATTERNS:
-        if fnmatch.fnmatch(relative, pattern) or fnmatch.fnmatch(name, pattern):
+        if fnmatch.fnmatch(relative_posix, pattern) or fnmatch.fnmatch(name, pattern):
             return True
     return False

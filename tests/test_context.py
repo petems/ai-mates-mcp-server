@@ -92,6 +92,29 @@ def test_file_size_cap_blocks_large_file(tmp_path):
     assert "x" * 100 not in result
 
 
+def test_blocks_nested_sensitive_directory_under_workspace_root(tmp_path):
+    project = tmp_path / "project"
+    ssh_dir = project / ".ssh"
+    ssh_dir.mkdir(parents=True)
+    (ssh_dir / "config").write_text("Host secret-host", encoding="utf-8")
+
+    result = read_relevant_files(["project/.ssh/config"], str(tmp_path))
+
+    assert "blocked: sensitive file" in result
+    assert "secret-host" not in result
+
+
+def test_blocks_nested_gcloud_directory_under_workspace_root(tmp_path):
+    gcloud_dir = tmp_path / "project" / ".config" / "gcloud"
+    gcloud_dir.mkdir(parents=True)
+    (gcloud_dir / "credentials.db").write_text("gcloud-token-value", encoding="utf-8")
+
+    result = read_relevant_files(["project/.config/gcloud/credentials.db"], str(tmp_path))
+
+    assert "blocked: sensitive file" in result
+    assert "gcloud-token-value" not in result
+
+
 def test_blocks_sensitive_directory_as_workspace_root(tmp_path):
     sensitive_root = tmp_path / ".aws"
     sensitive_root.mkdir()
