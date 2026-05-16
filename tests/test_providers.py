@@ -136,7 +136,7 @@ def test_local_config_rejects_string_aliases(tmp_path):
         encoding="utf-8",
     )
 
-    with pytest.raises(ModelRegistryError, match="aliases.*array"):
+    with pytest.raises(ModelRegistryError, match=r"aliases.*array"):
         ProviderRegistry(settings(models_file=str(models_file)))
 
 
