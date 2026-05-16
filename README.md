@@ -179,10 +179,10 @@ any provider I leave blank out of the final env block.
 You can also override defaults:
 
 ```bash
-OPENAI_MODEL=gpt-4.1
-ANTHROPIC_MODEL=claude-sonnet-4-5
-GEMINI_MODEL=gemini-2.5-pro
-DEFAULT_MODEL=auto
+export OPENAI_MODEL=gpt-4.1
+export ANTHROPIC_MODEL=claude-sonnet-4-5
+export GEMINI_MODEL=gemini-2.5-pro
+export DEFAULT_MODEL=auto
 ```
 
 ## Tools
