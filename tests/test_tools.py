@@ -45,6 +45,23 @@ class FakeRegistry:
             "gemini": "gemini-2.5-pro",
         }
 
+    async def list_models(self):
+        return {
+            "defaults": self.available_models(),
+            "configured_providers": ["openai", "anthropic", "gemini"],
+            "discovery": "off",
+            "live_errors": {},
+            "models": [
+                {
+                    "id": "gpt-4.1",
+                    "provider": "openai",
+                    "aliases": ["openai"],
+                    "configured": True,
+                    "is_default": True,
+                }
+            ],
+        }
+
 
 @pytest.mark.asyncio
 async def test_planner_completes_without_provider():
@@ -116,7 +133,9 @@ async def test_codereview_calls_assistant_model_when_enabled():
     assert registry.gemini.calls[0]["model"] == "gemini-2.5-pro"
 
 
-def test_listmodels_uses_registry():
-    result = json.loads(run_listmodels(FakeRegistry()))
+@pytest.mark.asyncio
+async def test_listmodels_uses_registry():
+    result = json.loads(await run_listmodels(FakeRegistry()))
 
-    assert result["available"]["openai"] == "gpt-4.1"
+    assert result["defaults"]["openai"] == "gpt-4.1"
+    assert result["models"][0]["aliases"] == ["openai"]

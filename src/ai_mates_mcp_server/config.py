@@ -8,9 +8,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-DEFAULT_OPENAI_MODEL = "gpt-4.1"
-DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
+DEFAULT_OPENAI_MODEL = "gpt-5.5"
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
 DEFAULT_MAX_TOKENS = 4096
 
 
@@ -25,6 +25,9 @@ class Settings:
     gemini_model: str
     conversation_ttl_seconds: int
     max_context_chars: int
+    models_file: str | None
+    model_discovery: str
+    allow_deprecated_models: bool
 
 
 def _int_env(name: str, default: int) -> int:
@@ -49,4 +52,14 @@ def load_settings() -> Settings:
         gemini_model=os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
         conversation_ttl_seconds=_int_env("MATES_CONVERSATION_TTL_SECONDS", 3 * 60 * 60),
         max_context_chars=_int_env("MATES_MAX_CONTEXT_CHARS", 120_000),
+        models_file=os.getenv("MATES_MODELS_FILE") or None,
+        model_discovery=os.getenv("MATES_MODEL_DISCOVERY", "off").strip().lower(),
+        allow_deprecated_models=_bool_env("MATES_ALLOW_DEPRECATED_MODELS", False),
     )
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}

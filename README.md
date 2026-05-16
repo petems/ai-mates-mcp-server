@@ -7,7 +7,8 @@ vendors.
 It intentionally supports only:
 
 - Providers: OpenAI, Anthropic, Gemini
-- Tools: `planner`, `consensus`, `codereview`
+- Core tools: `planner`, `consensus`, `codereview`
+- Utility tools: `listmodels`
 
 The goal is simple installation, small configuration, and predictable tool
 schemas.
@@ -179,9 +180,9 @@ any provider I leave blank out of the final env block.
 You can also override defaults:
 
 ```bash
-export OPENAI_MODEL=gpt-4.1
-export ANTHROPIC_MODEL=claude-sonnet-4-5
-export GEMINI_MODEL=gemini-2.5-pro
+export OPENAI_MODEL=gpt-5.5
+export ANTHROPIC_MODEL=claude-sonnet-4-6
+export GEMINI_MODEL=gemini-3.1-pro-preview
 export DEFAULT_MODEL=auto
 ```
 
@@ -208,6 +209,10 @@ Each model entry supports:
 Valid stances are `for`, `against`, and `neutral`. You can also provide a
 `stance_prompt`.
 
+Model names can be exact API IDs or aliases from the registry. Common aliases
+include `openai`, `gpt`, `sonnet`, `opus`, `haiku`, `gemini`, `pro`, `flash`,
+`mini`, and `nano`.
+
 ### `codereview`
 
 Runs a structured code-review workflow. It can use local findings only or call a
@@ -215,6 +220,44 @@ configured assistant model for validation.
 
 Set `use_assistant_model` to `false` when you only want the MCP tool to package
 and track your own review findings.
+
+### `listmodels`
+
+Lists model IDs, aliases, provider defaults, status, and whether each provider is
+configured. By default this uses the packaged and local registry only.
+
+Set `MATES_MODEL_DISCOVERY=list` to make `listmodels` augment the registry with
+live provider model-list API results when API keys are configured.
+
+## Local Model Registry
+
+AI Mates ships with a small current model catalogue, but you can add or override
+models locally without opening a PR:
+
+```bash
+MATES_MODELS_FILE=$HOME/.config/ai-mates/models.json
+```
+
+```json
+{
+  "defaults": {
+    "openai": "gpt-5.5"
+  },
+  "models": [
+    {
+      "id": "gpt-new-example",
+      "provider": "openai",
+      "aliases": ["new-openai"],
+      "rank": 120,
+      "status": "active"
+    }
+  ]
+}
+```
+
+Local entries replace packaged entries with the same `id`, and local aliases win
+when there is a collision. Deprecated, retired, or shut-down models are blocked
+unless `MATES_ALLOW_DEPRECATED_MODELS=true`.
 
 ## Development
 
