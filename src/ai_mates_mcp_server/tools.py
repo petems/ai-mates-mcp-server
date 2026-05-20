@@ -126,7 +126,6 @@ async def run_consensus(
             prompt,
             model=routed_model,
             system_prompt=system_prompt,
-            temperature=0.2,
         )
         return {
             "requested_model": model_config.model,
@@ -227,7 +226,6 @@ async def run_codereview(
             prompt,
             model=routed_model,
             system_prompt=CODEREVIEW_SYSTEM_PROMPT,
-            temperature=0.1,
         )
         data["assistant_validation"] = response.model_dump()
 

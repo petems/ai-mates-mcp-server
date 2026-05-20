@@ -100,6 +100,8 @@ async def test_consensus_consults_multiple_models():
     ]
     assert len(registry.openai.calls) == 1
     assert len(registry.anthropic.calls) == 1
+    assert "temperature" not in registry.openai.calls[0]
+    assert "temperature" not in registry.anthropic.calls[0]
 
 
 @pytest.mark.asyncio
@@ -131,6 +133,25 @@ async def test_codereview_calls_assistant_model_when_enabled():
 
     assert result["data"]["assistant_validation"]["provider"] == "gemini"
     assert registry.gemini.calls[0]["model"] == "gemini-2.5-pro"
+    assert "temperature" not in registry.gemini.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_codereview_acceptance_does_not_send_temperature_to_assistant_model():
+    registry = FakeRegistry()
+
+    result = json.loads(
+        await run_codereview(
+            step="Review these changes.",
+            findings="No issues found.",
+            model="anthropic",
+            registry=registry,
+        )
+    )
+
+    assert result["status"] == "code_review_complete"
+    assert registry.anthropic.calls[0]["model"] == "claude-sonnet-4-5"
+    assert "temperature" not in registry.anthropic.calls[0]
 
 
 @pytest.mark.asyncio

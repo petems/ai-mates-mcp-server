@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from ai_mates_mcp_server.config import Settings
-from ai_mates_mcp_server.providers import ProviderError, ProviderRegistry
+from ai_mates_mcp_server.providers import (
+    AnthropicProvider,
+    OpenAIProvider,
+    ProviderError,
+    ProviderRegistry,
+)
 from ai_mates_mcp_server.registry import ModelEntry, ModelRegistry, ModelRegistryError
 
 
@@ -218,3 +224,70 @@ async def test_live_discovery_failures_are_reported_without_failing():
 
     assert result["live_errors"]["openai"] == "nope"
     assert result["models"]
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_request_omits_temperature_even_when_provided():
+    calls = []
+
+    class FakeResponses:
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(output_text="ok", usage={"total_tokens": 1})
+
+    provider = OpenAIProvider.__new__(OpenAIProvider)
+    provider.api_key = "openai-key"
+    provider.default_model = "gpt-5.5"
+    provider.client = SimpleNamespace(responses=FakeResponses())
+
+    response = await provider.complete("Review this", temperature=0.1)
+
+    assert response.content == "ok"
+    assert calls[0]["model"] == "gpt-5.5"
+    assert "temperature" not in calls[0]
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_fallback_request_omits_temperature_even_when_provided():
+    calls = []
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            message = SimpleNamespace(content="ok")
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+
+    provider = OpenAIProvider.__new__(OpenAIProvider)
+    provider.api_key = "openai-key"
+    provider.default_model = "gpt-5.5"
+    provider.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions()),
+    )
+
+    response = await provider.complete("Review this", temperature=0.1)
+
+    assert response.content == "ok"
+    assert calls[0]["model"] == "gpt-5.5"
+    assert "temperature" not in calls[0]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_request_omits_temperature_even_when_provided():
+    calls = []
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            block = SimpleNamespace(type="text", text="ok")
+            return SimpleNamespace(content=[block], usage=None)
+
+    provider = AnthropicProvider.__new__(AnthropicProvider)
+    provider.api_key = "anthropic-key"
+    provider.default_model = "claude-opus-4-7"
+    provider.client = SimpleNamespace(messages=FakeMessages())
+
+    response = await provider.complete("Review this", temperature=0.1)
+
+    assert response.content == "ok"
+    assert calls[0]["model"] == "claude-opus-4-7"
+    assert "temperature" not in calls[0]
