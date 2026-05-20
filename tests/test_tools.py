@@ -34,15 +34,15 @@ class FakeRegistry:
             return self.openai, "gpt-4.1"
         if model in ("anthropic", "claude-sonnet-4-5"):
             return self.anthropic, "claude-sonnet-4-5"
-        if model in ("gemini", "gemini-2.5-pro"):
-            return self.gemini, "gemini-2.5-pro"
+        if model in ("gemini", "gemini-3.1-pro-preview"):
+            return self.gemini, "gemini-3.1-pro-preview"
         raise AssertionError(f"unexpected model: {model}")
 
     def available_models(self):
         return {
             "openai": "gpt-4.1",
             "anthropic": "claude-sonnet-4-5",
-            "gemini": "gemini-2.5-pro",
+            "gemini": "gemini-3.1-pro-preview",
         }
 
     async def list_models(self):
@@ -132,7 +132,7 @@ async def test_codereview_calls_assistant_model_when_enabled():
     )
 
     assert result["data"]["assistant_validation"]["provider"] == "gemini"
-    assert registry.gemini.calls[0]["model"] == "gemini-2.5-pro"
+    assert registry.gemini.calls[0]["model"] == "gemini-3.1-pro-preview"
     assert "temperature" not in registry.gemini.calls[0]
 
 

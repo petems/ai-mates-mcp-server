@@ -23,7 +23,7 @@ def settings(**overrides):
         "gemini_api_key": None,
         "openai_model": "gpt-4.1",
         "anthropic_model": "claude-sonnet-4-5",
-        "gemini_model": "gemini-2.5-pro",
+        "gemini_model": "gemini-3.1-pro-preview",
         "conversation_ttl_seconds": 60,
         "max_context_chars": 1000,
         "models_file": None,
@@ -176,6 +176,13 @@ def test_deprecated_models_error_by_default():
         registry.resolve("gpt-4.1-nano")
 
 
+def test_deprecated_models_block_prefix_fallback():
+    registry = ProviderRegistry(settings())
+
+    with pytest.raises(ProviderError, match="deprecated"):
+        registry.resolve("gpt-4")
+
+
 def test_deprecated_models_can_be_allowed():
     registry = ProviderRegistry(settings(allow_deprecated_models=True))
 
@@ -183,6 +190,40 @@ def test_deprecated_models_can_be_allowed():
 
     assert provider.name == "openai"
     assert model == "gpt-4.1-nano"
+
+
+def test_local_config_cannot_reactivate_deprecated_model(tmp_path):
+    models_file = tmp_path / "mates-models.json"
+    models_file.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "id": "gpt-4",
+                        "provider": "openai",
+                        "aliases": ["old-gpt"],
+                        "rank": 999,
+                        "status": "active",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = ProviderRegistry(settings(models_file=str(models_file)))
+
+    with pytest.raises(ProviderError, match="deprecated"):
+        registry.resolve("gpt-4")
+
+
+def test_deprecated_model_metadata_is_listed():
+    registry = ProviderRegistry(settings())
+
+    rows = {model["id"]: model for model in registry.model_registry.list_entries()}
+
+    assert rows["gpt-4"]["status"] == "deprecated"
+    assert rows["gpt-4"]["shutdown_date"] == "2026-10-23"
+    assert rows["gpt-4"]["replacement_models"] == ["gpt-5.5"]
 
 
 def test_prefix_fallback_accepts_unknown_clearly_routable_model():
