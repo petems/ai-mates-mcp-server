@@ -18,6 +18,13 @@ class ProviderError(RuntimeError):
     pass
 
 
+UNSUPPORTED_TEMPERATURE_PREFIXES: dict[ProviderName, tuple[str, ...]] = {
+    "openai": ("gpt-5", "o1", "o3", "o4"),
+    "anthropic": ("claude-opus-4", "claude-sonnet-4", "claude-haiku-4"),
+    "gemini": (),
+}
+
+
 class ModelProvider(ABC):
     name: ProviderName
 
@@ -59,28 +66,28 @@ class OpenAIProvider(ModelProvider):
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> ProviderResponse:
         model_name = model or self.default_model
-        try:
+        if hasattr(self.client, "responses"):
             kwargs: dict[str, Any] = {
                 "model": model_name,
                 "input": prompt,
                 "instructions": system_prompt,
                 "max_output_tokens": max_tokens,
+                **_temperature_kwargs(self.name, model_name, temperature),
             }
-            kwargs.update(_temperature_kwargs(self.name, model_name, temperature))
             response = await self.client.responses.create(**kwargs)
             content = _extract_openai_response_text(response)
             usage = _dump_usage(getattr(response, "usage", None))
-        except AttributeError:
+        else:
             messages: list[dict[str, str]] = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
-            kwargs = {
+            kwargs: dict[str, Any] = {
                 "model": model_name,
                 "messages": messages,
                 "max_tokens": max_tokens,
+                **_temperature_kwargs(self.name, model_name, temperature),
             }
-            kwargs.update(_temperature_kwargs(self.name, model_name, temperature))
             response = await self.client.chat.completions.create(**kwargs)
             content = response.choices[0].message.content or ""
             usage = _dump_usage(getattr(response, "usage", None))
@@ -114,8 +121,8 @@ class AnthropicProvider(ModelProvider):
             "max_tokens": max_tokens,
             "system": system_prompt,
             "messages": [{"role": "user", "content": prompt}],
+            **_temperature_kwargs(self.name, model_name, temperature),
         }
-        kwargs.update(_temperature_kwargs(self.name, model_name, temperature))
         response = await self.client.messages.create(**kwargs)
         text_parts = [
             block.text for block in response.content if getattr(block, "type", None) == "text"
@@ -152,12 +159,11 @@ class GeminiProvider(ModelProvider):
         model_name = model or self.default_model
 
         def call() -> Any:
-            config_kwargs: dict[str, Any] = {
-                "max_output_tokens": max_tokens,
-                "system_instruction": system_prompt,
-            }
-            config_kwargs.update(_temperature_kwargs(self.name, model_name, temperature))
-            config = genai_types.GenerateContentConfig(**config_kwargs)
+            config = genai_types.GenerateContentConfig(
+                max_output_tokens=max_tokens,
+                system_instruction=system_prompt,
+                **_temperature_kwargs(self.name, model_name, temperature),
+            )
             return self.client.models.generate_content(
                 model=model_name,
                 contents=prompt,
@@ -324,9 +330,8 @@ def _temperature_kwargs(
 
 
 def _supports_temperature(provider: ProviderName, model: str) -> bool:
-    if provider == "gemini":
-        return True
-    return False
+    normalized = model.lower()
+    return not normalized.startswith(UNSUPPORTED_TEMPERATURE_PREFIXES[provider])
 
 
 def _dump_usage(usage: Any) -> dict | None:

@@ -248,6 +248,25 @@ async def test_openai_responses_request_omits_temperature_even_when_provided():
 
 
 @pytest.mark.asyncio
+async def test_openai_supported_model_keeps_explicit_temperature():
+    calls = []
+
+    class FakeResponses:
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(output_text="ok", usage=None)
+
+    provider = OpenAIProvider.__new__(OpenAIProvider)
+    provider.api_key = "openai-key"
+    provider.default_model = "gpt-4.1"
+    provider.client = SimpleNamespace(responses=FakeResponses())
+
+    await provider.complete("Review this", temperature=0.1)
+
+    assert calls[0]["temperature"] == 0.1
+
+
+@pytest.mark.asyncio
 async def test_openai_chat_fallback_request_omits_temperature_even_when_provided():
     calls = []
 
@@ -291,3 +310,23 @@ async def test_anthropic_request_omits_temperature_even_when_provided():
     assert response.content == "ok"
     assert calls[0]["model"] == "claude-opus-4-7"
     assert "temperature" not in calls[0]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_supported_model_keeps_explicit_temperature():
+    calls = []
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            block = SimpleNamespace(type="text", text="ok")
+            return SimpleNamespace(content=[block], usage=None)
+
+    provider = AnthropicProvider.__new__(AnthropicProvider)
+    provider.api_key = "anthropic-key"
+    provider.default_model = "claude-3-5-sonnet-20241022"
+    provider.client = SimpleNamespace(messages=FakeMessages())
+
+    await provider.complete("Review this", temperature=0.1)
+
+    assert calls[0]["temperature"] == 0.1
