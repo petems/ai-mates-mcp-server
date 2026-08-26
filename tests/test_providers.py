@@ -395,3 +395,37 @@ async def test_anthropic_supported_model_keeps_explicit_temperature():
     await provider.complete("Review this", temperature=0.1)
 
     assert calls[0]["temperature"] == 0.1
+
+
+def test_deprecated_provider_default_raises_provider_error():
+    with pytest.raises(ProviderError, match="Configured default model for provider 'openai'"):
+        ProviderRegistry(settings(openai_model="gpt-4"))
+
+
+def test_deprecated_provider_default_allowed_when_opted_in():
+    registry = ProviderRegistry(settings(openai_model="gpt-4", allow_deprecated_models=True))
+
+    assert registry.providers["openai"].default_model == "gpt-4"
+
+
+def test_replacement_models_must_be_an_array():
+    with pytest.raises(ModelRegistryError, match=r"replacement_models.*array"):
+        ModelEntry.from_mapping(
+            {"id": "m", "provider": "openai", "replacement_models": "nope"},
+            source="local",
+        )
+
+
+def test_replacement_models_preserve_case_and_drop_blanks():
+    entry = ModelEntry.from_mapping(
+        {
+            "id": "m",
+            "provider": "openai",
+            "aliases": ["  Upper  ", "  "],
+            "replacement_models": ["  GPT-5.5  ", "  "],
+        },
+        source="local",
+    )
+
+    assert entry.aliases == ("upper",)
+    assert entry.replacement_models == ("GPT-5.5",)

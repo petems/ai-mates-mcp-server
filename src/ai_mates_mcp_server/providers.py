@@ -239,7 +239,7 @@ class ProviderRegistry:
         normalized = requested.lower()
         if normalized in {"openai", "anthropic", "gemini"}:
             provider_name = normalized  # type: ignore[assignment]
-            default_model = self.model_registry.default_for_provider(provider_name)
+            default_model = self._provider_default_or_none(provider_name)
             if not default_model and provider_name in self.providers:
                 default_model = self.providers[provider_name].default_model
             if not default_model:
@@ -299,8 +299,16 @@ class ProviderRegistry:
             "models": self.model_registry.list_entries(set(self.providers)),
         }
 
+    def _provider_default_or_none(self, provider_name: ProviderName) -> str | None:
+        try:
+            return self.model_registry.default_for_provider(provider_name)
+        except ModelRegistryError as exc:
+            raise ProviderError(
+                f"Configured default model for provider '{provider_name}' is unusable: {exc}"
+            ) from exc
+
     def _provider_default(self, provider_name: ProviderName) -> str:
-        return self.model_registry.default_for_provider(provider_name) or getattr(
+        return self._provider_default_or_none(provider_name) or getattr(
             self.settings, f"{provider_name}_model"
         )
 

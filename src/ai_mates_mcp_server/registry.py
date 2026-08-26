@@ -44,32 +44,13 @@ class ModelEntry:
         if not model_id:
             raise ModelRegistryError("Model entry id cannot be empty")
 
-        raw_aliases = data.get("aliases", [])
-        if raw_aliases is None:
-            raw_aliases = []
-        if not isinstance(raw_aliases, (list, tuple)):
-            raise ModelRegistryError(f"Model entry aliases for '{model_id}' must be an array")
-        aliases = []
-        for alias in raw_aliases:
-            if not isinstance(alias, str):
-                raise ModelRegistryError(f"Model entry aliases for '{model_id}' must be strings")
-            if alias.strip():
-                aliases.append(_normalize_key(alias))
-        raw_replacements = data.get("replacement_models", [])
-        if raw_replacements is None:
-            raw_replacements = []
-        if not isinstance(raw_replacements, (list, tuple)):
-            raise ModelRegistryError(
-                f"Model entry replacement_models for '{model_id}' must be an array"
-            )
-        replacement_models = []
-        for replacement in raw_replacements:
-            if not isinstance(replacement, str):
-                raise ModelRegistryError(
-                    f"Model entry replacement_models for '{model_id}' must be strings"
-                )
-            if replacement.strip():
-                replacement_models.append(replacement.strip())
+        aliases = _string_list(data.get("aliases"), field="aliases", model_id=model_id)
+        replacement_models = _string_list(
+            data.get("replacement_models"),
+            field="replacement_models",
+            model_id=model_id,
+            normalize=False,
+        )
 
         return cls(
             id=model_id,
@@ -260,6 +241,27 @@ class ModelRegistry:
 
 def _normalize_key(value: str) -> str:
     return value.strip().lower()
+
+
+def _string_list(
+    raw: Any,
+    *,
+    field: str,
+    model_id: str,
+    normalize: bool = True,
+) -> list[str]:
+    """Parse a model entry's list-of-strings field, dropping blank values."""
+    if raw is None:
+        raw = []
+    if not isinstance(raw, (list, tuple)):
+        raise ModelRegistryError(f"Model entry {field} for '{model_id}' must be an array")
+    values = []
+    for value in raw:
+        if not isinstance(value, str):
+            raise ModelRegistryError(f"Model entry {field} for '{model_id}' must be strings")
+        if value.strip():
+            values.append(_normalize_key(value) if normalize else value.strip())
+    return values
 
 
 def _validate_default_model_id(provider: str, model_id: Any, *, source: str) -> str:
