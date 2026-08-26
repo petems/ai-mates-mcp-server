@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -730,13 +731,111 @@ async def test_gemini_list_model_ids_strips_vertex_prefixes():
 
 
 async def test_list_models_reports_auth_mode_and_errors():
-    with fake_adc(), patch("ai_mates_mcp_server.providers.genai.Client"):
+    with (
+        fake_adc(),
+        patch("ai_mates_mcp_server.providers.genai.Client"),
+    ):
         registry = ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
+        result = await registry.list_models()
+
+    assert result["provider_auth"]["openai"] == {
+        "mode": "api-key",
+        "state": "missing",
+        "source": None,
+    }
+    assert result["provider_auth"]["anthropic"] == {
+        "mode": "api-key",
+        "state": "missing",
+        "source": None,
+    }
+    assert result["provider_auth"]["gemini"]["mode"] == "gcloud-adc"
+    assert result["provider_auth"]["gemini"]["state"] == "valid"
+    assert result["provider_auth"]["gemini"]["credential_type"] == "unknown"
+    assert result["provider_errors"] == {}
+
+
+async def test_list_models_reports_api_key_presence_and_sources():
+    registry = ProviderRegistry(
+        settings(
+            openai_api_key="openai-key",
+            anthropic_api_key="anthropic-key",
+            gemini_api_key="gemini-key",
+            gemini_use_gcloud_auth=False,
+        )
+    )
 
     result = await registry.list_models()
 
-    assert result["provider_auth"] == {"gemini": "gcloud-adc"}
-    assert result["provider_errors"] == {}
+    assert result["provider_auth"]["openai"] == {
+        "mode": "api-key",
+        "state": "present",
+        "source": "OPENAI_API_KEY",
+    }
+    assert result["provider_auth"]["anthropic"] == {
+        "mode": "api-key",
+        "state": "present",
+        "source": "ANTHROPIC_API_KEY",
+    }
+    assert result["provider_auth"]["gemini"] == {
+        "mode": "api-key",
+        "state": "present",
+        "source": "GEMINI_API_KEY",
+    }
+
+
+async def test_gemini_gcloud_auth_missing_credentials_reports_missing_state():
+    with patch(
+        "ai_mates_mcp_server.providers.google.auth.default",
+        side_effect=DefaultCredentialsError("no ADC"),
+    ):
+        registry = ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
+        result = await registry.list_models()
+
+    assert result["provider_auth"]["gemini"]["state"] == "missing"
+    assert "application-default login" in result["provider_auth"]["gemini"]["hint"]
+
+
+async def test_gemini_gcloud_auth_expired_credentials_are_reported():
+    class FakeAuthorizedUserCredentials:
+        __module__ = "google.oauth2.credentials"
+
+        def __init__(self):
+            self.expired = True
+            self.expiry = datetime(2026, 8, 26, 17, 4, 11, tzinfo=UTC)
+            self.quota_project_id = "my-project"
+
+    with (
+        patch(
+            "ai_mates_mcp_server.providers.google.auth.default",
+            return_value=(FakeAuthorizedUserCredentials(), "adc-project"),
+        ),
+        patch("ai_mates_mcp_server.providers.genai.Client"),
+    ):
+        registry = ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
+        result = await registry.list_models()
+
+    assert result["provider_auth"]["gemini"]["state"] == "expired"
+    assert result["provider_auth"]["gemini"]["credential_type"] == "authorized_user"
+    assert result["provider_auth"]["gemini"]["quota_project"] == "my-project"
+    assert result["provider_auth"]["gemini"]["expires_at"] == "2026-08-26T17:04:11Z"
+    assert "application-default login" in result["provider_auth"]["gemini"]["hint"]
+
+
+async def test_gemini_gcloud_auth_inspection_failures_degrade_to_unknown_state():
+    with (
+        fake_adc(),
+        patch("ai_mates_mcp_server.providers.genai.Client"),
+    ):
+        registry = ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
+
+    with patch(
+        "ai_mates_mcp_server.providers.google.auth.default",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = await registry.list_models()
+
+    assert result["provider_auth"]["gemini"]["state"] == "unknown"
+    assert "application-default login" in result["provider_auth"]["gemini"]["hint"]
 
 
 async def test_stale_adc_is_reloaded_and_the_call_retried():

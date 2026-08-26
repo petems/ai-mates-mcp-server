@@ -246,8 +246,8 @@ Things worth knowing:
 - `GOOGLE_GENAI_USE_VERTEXAI=true` (the variable the google-genai SDK reads)
   works as an alias if you already export it.
 - Model IDs are the same, but Vertex only serves the models available in your
-  project and region. `listmodels` reports the auth mode per provider under
-  `provider_auth`.
+  project and region. `listmodels` reports mode and credential health per
+  provider under `provider_auth`.
 - ADC access tokens last an hour, but that expiry is invisible: `google-auth`
   refreshes them for you. What does break is the underlying grant being revoked,
   or expiring under an org reauth policy. When that happens, run
@@ -297,9 +297,17 @@ and track your own review findings.
 
 ### `listmodels`
 
-Lists model IDs, aliases, provider defaults, status, the auth mode used per
-provider (`api-key` or `gcloud-adc`), any provider setup errors, and whether each
-provider is configured. By default this uses the packaged and local registry only.
+Lists model IDs, aliases, provider defaults, status, provider credential health,
+any provider setup errors, and whether each provider is configured. By default
+this uses the packaged and local registry only.
+
+`provider_auth` always includes `openai`, `anthropic`, and `gemini`:
+
+- API-key mode reports `mode`, `state` (`present` or `missing`), and `source`
+  (env var name only; key material is never returned).
+- Gemini gcloud ADC mode reports `mode`, `state` (`valid`, `expired`,
+  `missing`, or `unknown`), plus `quota_project`, `credential_type`, optional
+  `expires_at`, and an actionable `hint` when state is not `valid`.
 
 Set `MATES_MODEL_DISCOVERY=list` to make `listmodels` augment the registry with
 live provider model-list API results when API keys are configured.
