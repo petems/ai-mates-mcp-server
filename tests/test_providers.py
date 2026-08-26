@@ -471,3 +471,66 @@ async def test_listmodels_omits_deprecated_registry_by_default():
     assert default_payload["deprecated_model_count"] > 0
     assert "are omitted" in default_payload["note"]
     assert len(json.dumps(default_payload)) < len(json.dumps(full_payload)) / 5
+
+
+def _deprecated_alias_file(tmp_path, aliases):
+    models_file = tmp_path / "mates-models.json"
+    models_file.write_text(
+        json.dumps(
+            {
+                "deprecated_models": [
+                    {
+                        "id": "gpt-4",
+                        "provider": "openai",
+                        "status": "deprecated",
+                        "aliases": aliases,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    return models_file
+
+
+def test_deprecated_model_alias_is_blocked(tmp_path):
+    models_file = _deprecated_alias_file(tmp_path, ["legacy-gpt"])
+    registry = ProviderRegistry(settings(models_file=str(models_file)))
+
+    with pytest.raises(ProviderError, match="deprecated"):
+        registry.resolve("legacy-gpt")
+
+
+def test_deprecated_model_alias_resolves_when_opted_in(tmp_path):
+    models_file = _deprecated_alias_file(tmp_path, ["legacy-gpt"])
+    registry = ModelRegistry(local_models_file=str(models_file), allow_deprecated=True)
+
+    entry = registry.resolve("legacy-gpt")
+
+    assert entry is not None
+    assert entry.id == "gpt-4"
+
+
+def test_routable_looking_deprecated_alias_does_not_reach_prefix_fallback(tmp_path):
+    models_file = _deprecated_alias_file(tmp_path, ["gpt-old"])
+    registry = ProviderRegistry(settings(models_file=str(models_file)))
+
+    with pytest.raises(ProviderError, match="deprecated"):
+        registry.resolve("gpt-old")
+
+
+def test_replacing_deprecated_entry_drops_its_stale_aliases():
+    registry = ModelRegistry()
+    payload = {
+        "deprecated_models": [
+            {"id": "gpt-4", "provider": "openai", "status": "deprecated", "aliases": ["old-a"]}
+        ]
+    }
+    registry._merge_data(payload, source="local")
+    assert registry.aliases["old-a"] == "gpt-4"
+
+    payload["deprecated_models"][0]["aliases"] = ["old-b"]
+    registry._merge_data(payload, source="local")
+
+    assert "old-a" not in registry.aliases
+    assert registry.aliases["old-b"] == "gpt-4"

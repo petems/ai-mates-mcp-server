@@ -230,7 +230,14 @@ class ModelRegistry:
                     f"'{entry.status}'. Allowed statuses: {', '.join(sorted(DEPRECATED_STATUSES))}."
                 )
             key = _normalize_key(entry.id)
+            old_entry = self.deprecated_entries.get(key)
+            if old_entry:
+                for alias in old_entry.aliases:
+                    if self.aliases.get(alias) == key:
+                        del self.aliases[alias]
             self.deprecated_entries[key] = entry
+            for alias in entry.aliases:
+                self.aliases[alias] = key
 
     def _validate_status(self, entry: ModelEntry) -> None:
         if entry.status in ACTIVE_STATUSES:
