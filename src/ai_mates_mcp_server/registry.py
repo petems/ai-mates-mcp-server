@@ -157,6 +157,8 @@ class ModelRegistry:
     def list_entries(
         self,
         configured_providers: set[ProviderName] | None = None,
+        *,
+        include_deprecated: bool = False,
     ) -> list[dict[str, Any]]:
         rows = []
         for entry in self.entries.values():
@@ -168,13 +170,16 @@ class ModelRegistry:
             )
             row["is_default"] = self.defaults.get(entry.provider) == entry.id
             rows.append(row)
-        for entry in self.deprecated_entries.values():
-            row = entry.to_dict()
-            row["configured"] = (
-                entry.provider in configured_providers if configured_providers is not None else None
-            )
-            row["is_default"] = False
-            rows.append(row)
+        if include_deprecated:
+            for entry in self.deprecated_entries.values():
+                row = entry.to_dict()
+                row["configured"] = (
+                    entry.provider in configured_providers
+                    if configured_providers is not None
+                    else None
+                )
+                row["is_default"] = False
+                rows.append(row)
         rows.sort(key=lambda item: (item["provider"], -item["rank"], item["id"]))
         return rows
 
@@ -219,6 +224,11 @@ class ModelRegistry:
 
         for raw_entry in data.get("deprecated_models", []):
             entry = ModelEntry.from_mapping(raw_entry, source=source)
+            if entry.status not in DEPRECATED_STATUSES:
+                raise ModelRegistryError(
+                    f"Model '{entry.id}' in deprecated_models has non-deprecated status "
+                    f"'{entry.status}'. Allowed statuses: {', '.join(sorted(DEPRECATED_STATUSES))}."
+                )
             key = _normalize_key(entry.id)
             self.deprecated_entries[key] = entry
 

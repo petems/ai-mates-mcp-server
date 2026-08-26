@@ -243,7 +243,10 @@ def test_local_alias_cannot_bypass_deprecated_model(tmp_path):
 def test_deprecated_model_metadata_is_listed():
     registry = ProviderRegistry(settings())
 
-    rows = {model["id"]: model for model in registry.model_registry.list_entries()}
+    rows = {
+        model["id"]: model
+        for model in registry.model_registry.list_entries(include_deprecated=True)
+    }
 
     assert rows["gpt-4"]["status"] == "deprecated"
     assert rows["gpt-4"]["shutdown_date"] == "2026-10-23"
@@ -429,3 +432,42 @@ def test_replacement_models_preserve_case_and_drop_blanks():
 
     assert entry.aliases == ("upper",)
     assert entry.replacement_models == ("GPT-5.5",)
+
+
+def test_local_deprecated_models_cannot_reactivate_blocked_id(tmp_path):
+    models_file = tmp_path / "mates-models.json"
+    models_file.write_text(
+        json.dumps(
+            {"deprecated_models": [{"id": "gpt-4", "provider": "openai", "status": "active"}]}
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ModelRegistryError, match="non-deprecated status"):
+        ProviderRegistry(settings(models_file=str(models_file)))
+
+
+def test_list_entries_omits_deprecated_by_default():
+    registry = ProviderRegistry(settings())
+
+    default_rows = registry.model_registry.list_entries()
+    full_rows = registry.model_registry.list_entries(include_deprecated=True)
+
+    assert all(row["status"] in {"active", "preview"} for row in default_rows)
+    assert len(full_rows) > len(default_rows)
+    assert "gpt-4" not in {row["id"] for row in default_rows}
+
+
+@pytest.mark.asyncio
+async def test_listmodels_omits_deprecated_registry_by_default():
+    from ai_mates_mcp_server.tools import run_listmodels
+
+    registry = ProviderRegistry(settings())
+
+    default_payload = json.loads(await run_listmodels(registry))
+    full_payload = json.loads(await run_listmodels(registry, include_deprecated=True))
+
+    assert default_payload["deprecated_models_included"] is False
+    assert default_payload["deprecated_model_count"] > 0
+    assert "are omitted" in default_payload["note"]
+    assert len(json.dumps(default_payload)) < len(json.dumps(full_payload)) / 5

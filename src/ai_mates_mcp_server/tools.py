@@ -242,13 +242,24 @@ async def run_codereview(
     return envelope.model_dump_json(indent=2)
 
 
-async def run_listmodels(registry: ProviderRegistry | None = None) -> str:
+async def run_listmodels(
+    registry: ProviderRegistry | None = None,
+    *,
+    include_deprecated: bool = False,
+) -> str:
     provider_registry = registry or ProviderRegistry()
-    data = await provider_registry.list_models()
-    data["note"] = (
+    data = await provider_registry.list_models(include_deprecated=include_deprecated)
+    note = (
         "Use provider aliases openai, anthropic, gemini, configured aliases like "
         "sonnet/pro/flash, or an explicit model name."
     )
+    omitted = 0 if include_deprecated else data.get("deprecated_model_count", 0)
+    if omitted:
+        note += (
+            f" {omitted} blocked/deprecated model IDs are omitted; "
+            "call with include_deprecated=true to see them."
+        )
+    data["note"] = note
     return json.dumps(data, indent=2)
 
 

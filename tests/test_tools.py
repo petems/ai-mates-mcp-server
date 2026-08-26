@@ -45,7 +45,7 @@ class FakeRegistry:
             "gemini": "gemini-3.1-pro-preview",
         }
 
-    async def list_models(self):
+    async def list_models(self, *, include_deprecated: bool = False):
         return {
             "defaults": self.available_models(),
             "configured_providers": ["openai", "anthropic", "gemini"],

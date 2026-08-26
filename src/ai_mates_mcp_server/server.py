@@ -134,10 +134,14 @@ async def codereview(
         openWorldHint=True,
     )
 )
-async def listmodels() -> str:
-    """List configured model aliases, defaults, statuses, and optional live discovery data."""
+async def listmodels(include_deprecated: bool = False) -> str:
+    """List configured model aliases, defaults, statuses, and optional live discovery data.
+
+    Set include_deprecated=True to also return the blocked/deprecated model registry, which is
+    large and omitted by default.
+    """
     try:
-        return await run_listmodels()
+        return await run_listmodels(include_deprecated=include_deprecated)
     except Exception as exc:
         return tool_error(exc)
 

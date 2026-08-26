@@ -281,7 +281,7 @@ class ProviderRegistry:
             )
         return provider, model
 
-    async def list_models(self) -> dict[str, Any]:
+    async def list_models(self, *, include_deprecated: bool = False) -> dict[str, Any]:
         live_errors: dict[str, str] = {}
         if self.settings.model_discovery == "list":
             for provider_name, provider in self.providers.items():
@@ -296,7 +296,12 @@ class ProviderRegistry:
             "configured_providers": sorted(self.providers),
             "discovery": self.settings.model_discovery,
             "live_errors": live_errors,
-            "models": self.model_registry.list_entries(set(self.providers)),
+            "models": self.model_registry.list_entries(
+                set(self.providers),
+                include_deprecated=include_deprecated,
+            ),
+            "deprecated_model_count": len(self.model_registry.deprecated_entries),
+            "deprecated_models_included": include_deprecated,
         }
 
     def _provider_default_or_none(self, provider_name: ProviderName) -> str | None:
