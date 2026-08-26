@@ -237,9 +237,12 @@ Things worth knowing:
   flag makes the server build a Vertex AI client (`vertexai=True`). You need a
   GCP project with the Vertex AI API enabled and the `roles/aiplatform.user`
   role.
-- `GEMINI_USE_GCLOUD_AUTH=true` wins over `GEMINI_API_KEY`. The explicit opt-in
-  is treated as the stronger signal, so an API key left over in your shell does
-  not silently take over.
+- `GEMINI_USE_GCLOUD_AUTH=true` wins over `GEMINI_API_KEY` and `GOOGLE_API_KEY`.
+  The explicit opt-in is treated as the stronger signal, so an API key left over
+  in your shell does not silently take over. Credentials are resolved up front
+  and passed to the SDK explicitly to keep that promise: given only
+  `vertexai=True`, the SDK would fall back to either of those environment keys
+  and never load ADC.
 - `GOOGLE_GENAI_USE_VERTEXAI=true` (the variable the google-genai SDK reads)
   works as an alias if you already export it.
 - Model IDs are the same, but Vertex only serves the models available in your

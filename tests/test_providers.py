@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from google.auth.credentials import AnonymousCredentials
 from google.auth.exceptions import DefaultCredentialsError, RefreshError
 
 from ai_mates_mcp_server.config import Settings
@@ -543,6 +544,17 @@ def test_replacing_deprecated_entry_drops_its_stale_aliases():
     assert registry.aliases["old-b"] == "gpt-4"
 
 
+FAKE_ADC_PROJECT = "adc-project"
+
+
+def fake_adc(credentials=None, project=FAKE_ADC_PROJECT):
+    """Patch ADC resolution with credentials that need no network or key material."""
+    return patch(
+        "ai_mates_mcp_server.providers.google.auth.default",
+        return_value=(credentials or AnonymousCredentials(), project),
+    )
+
+
 def test_gemini_api_key_uses_developer_api_client():
     with patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
         registry = ProviderRegistry(settings(openai_api_key=None, gemini_api_key="my-key"))
@@ -552,16 +564,20 @@ def test_gemini_api_key_uses_developer_api_client():
 
 
 def test_gemini_gcloud_auth_uses_vertex_client():
-    with patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
+    credentials = AnonymousCredentials()
+    with fake_adc(credentials), patch("ai_mates_mcp_server.providers.genai.Client") as mock_cls:
         registry = ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
 
-    mock_client_cls.assert_called_once_with(vertexai=True)
+    mock_cls.assert_called_once_with(
+        vertexai=True, credentials=credentials, project=FAKE_ADC_PROJECT
+    )
     assert registry.providers["gemini"].auth_mode == "gcloud-adc"
     assert registry.providers["gemini"].api_key is None
 
 
-def test_gemini_gcloud_auth_passes_project_and_location():
-    with patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
+def test_gemini_gcloud_auth_prefers_explicit_project_over_adc_project():
+    credentials = AnonymousCredentials()
+    with fake_adc(credentials), patch("ai_mates_mcp_server.providers.genai.Client") as mock_cls:
         ProviderRegistry(
             settings(
                 openai_api_key=None,
@@ -571,26 +587,53 @@ def test_gemini_gcloud_auth_passes_project_and_location():
             )
         )
 
-    mock_client_cls.assert_called_once_with(
-        vertexai=True, project="my-project", location="europe-west1"
+    mock_cls.assert_called_once_with(
+        vertexai=True,
+        credentials=credentials,
+        project="my-project",
+        location="europe-west1",
     )
 
 
-def test_gemini_gcloud_auth_takes_precedence_over_api_key():
-    with patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
-        ProviderRegistry(
-            settings(
-                openai_api_key=None,
-                gemini_api_key="my-key",
-                gemini_use_gcloud_auth=True,
-            )
-        )
+def test_gemini_gcloud_auth_survives_adc_without_a_project():
+    credentials = AnonymousCredentials()
+    with (
+        fake_adc(credentials, project=None),
+        patch("ai_mates_mcp_server.providers.genai.Client") as mock_cls,
+    ):
+        ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
 
-    mock_client_cls.assert_called_once_with(vertexai=True)
+    mock_cls.assert_called_once_with(vertexai=True, credentials=credentials)
+
+
+@pytest.mark.parametrize("env_var", ["GEMINI_API_KEY", "GOOGLE_API_KEY"])
+def test_ambient_api_key_cannot_hijack_gcloud_auth(monkeypatch, env_var):
+    """Regression test for the SDK's env-key fallback.
+
+    Built with only ``vertexai=True``, the real client picks up an ambient key and
+    skips ADC entirely, so this exercises the genuine SDK rather than a mock.
+    """
+    for name in (
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(env_var, "leftover-key")
+
+    with fake_adc():
+        provider = GeminiProvider(None, "gemini-2.5-pro", use_gcloud_auth=True)
+
+    api_client = provider.client._api_client
+    assert api_client.api_key is None
+    assert api_client.project == FAKE_ADC_PROJECT
+    assert api_client._credentials is not None
+    assert "x-goog-api-key" not in (api_client._http_options.headers or {})
 
 
 def test_gemini_gcloud_auth_resolves_provider():
-    with patch("ai_mates_mcp_server.providers.genai.Client"):
+    with fake_adc(), patch("ai_mates_mcp_server.providers.genai.Client"):
         registry = ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
 
     provider, model = registry.resolve("gemini")
@@ -610,7 +653,7 @@ def test_no_gemini_auth_configured_does_not_add_gemini_provider():
 
 def test_missing_adc_does_not_break_other_providers():
     with patch(
-        "ai_mates_mcp_server.providers.genai.Client",
+        "ai_mates_mcp_server.providers.google.auth.default",
         side_effect=DefaultCredentialsError("no ADC"),
     ):
         registry = ProviderRegistry(settings(gemini_use_gcloud_auth=True))
@@ -623,7 +666,7 @@ def test_missing_adc_does_not_break_other_providers():
 
 def test_missing_adc_is_reported_when_gemini_is_requested():
     with patch(
-        "ai_mates_mcp_server.providers.genai.Client",
+        "ai_mates_mcp_server.providers.google.auth.default",
         side_effect=DefaultCredentialsError("no ADC"),
     ):
         registry = ProviderRegistry(settings(gemini_use_gcloud_auth=True))
@@ -634,7 +677,7 @@ def test_missing_adc_is_reported_when_gemini_is_requested():
 
 def test_missing_adc_is_reported_when_no_provider_is_configured():
     with patch(
-        "ai_mates_mcp_server.providers.genai.Client",
+        "ai_mates_mcp_server.providers.google.auth.default",
         side_effect=DefaultCredentialsError("no ADC"),
     ):
         registry = ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
@@ -644,9 +687,12 @@ def test_missing_adc_is_reported_when_no_provider_is_configured():
 
 
 def test_vertex_project_misconfiguration_is_reported_as_provider_error():
-    with patch(
-        "ai_mates_mcp_server.providers.genai.Client",
-        side_effect=ValueError("Project or API key must be set when using the Vertex AI API."),
+    with (
+        fake_adc(project=None),
+        patch(
+            "ai_mates_mcp_server.providers.genai.Client",
+            side_effect=ValueError("Project or API key must be set when using the Vertex AI API."),
+        ),
     ):
         registry = ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
 
@@ -672,7 +718,7 @@ def test_normalize_gemini_model_name(raw, expected):
 
 
 async def test_gemini_list_model_ids_strips_vertex_prefixes():
-    with patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
+    with fake_adc(), patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
         client = mock_client_cls.return_value
         client.models.list.return_value = [
             SimpleNamespace(name="publishers/google/models/gemini-2.5-pro"),
@@ -684,7 +730,7 @@ async def test_gemini_list_model_ids_strips_vertex_prefixes():
 
 
 async def test_list_models_reports_auth_mode_and_errors():
-    with patch("ai_mates_mcp_server.providers.genai.Client"):
+    with fake_adc(), patch("ai_mates_mcp_server.providers.genai.Client"):
         registry = ProviderRegistry(settings(openai_api_key=None, gemini_use_gcloud_auth=True))
 
     result = await registry.list_models()
@@ -694,7 +740,7 @@ async def test_list_models_reports_auth_mode_and_errors():
 
 
 async def test_expired_adc_is_translated_into_actionable_error():
-    with patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
+    with fake_adc(), patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
         client = mock_client_cls.return_value
         client.models.generate_content.side_effect = RefreshError("invalid_grant")
         provider = GeminiProvider(None, "gemini-2.5-pro", use_gcloud_auth=True)

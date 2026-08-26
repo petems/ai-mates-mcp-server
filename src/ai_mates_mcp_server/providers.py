@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
+import google.auth
 from anthropic import AsyncAnthropic
 from google import genai
 from google.auth import exceptions as google_auth_exceptions
@@ -388,24 +389,36 @@ def _gemini_vertex_client(*, project: str | None, location: str | None) -> genai
     Plain ``genai.Client()`` talks to the Gemini Developer API, which only accepts
     API keys. ADC (``gcloud auth application-default login``) is a Vertex AI path,
     so ``vertexai=True`` is required for gcloud credentials to be used at all.
+
+    Credentials and project are resolved here and passed explicitly rather than
+    left to the SDK. Given only ``vertexai=True``, the SDK falls back to
+    ``GEMINI_API_KEY``/``GOOGLE_API_KEY`` from the environment and never loads ADC
+    at all, which would quietly authenticate with the key this mode exists to avoid.
     """
-    kwargs: dict[str, Any] = {"vertexai": True}
-    if project:
-        kwargs["project"] = project
+    credentials, adc_project = _load_adc()
+    kwargs: dict[str, Any] = {"vertexai": True, "credentials": credentials}
+    resolved_project = project or adc_project
+    if resolved_project:
+        kwargs["project"] = resolved_project
     if location:
         kwargs["location"] = location
     try:
         return genai.Client(**kwargs)
+    except ValueError as exc:
+        raise ProviderError(
+            f"Gemini gcloud auth is enabled but the Vertex AI client could not be built: {exc} "
+            "Set GOOGLE_CLOUD_PROJECT (and optionally GOOGLE_CLOUD_LOCATION)."
+        ) from exc
+
+
+def _load_adc() -> tuple[Any, str | None]:
+    try:
+        return google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
     except google_auth_exceptions.DefaultCredentialsError as exc:
         raise ProviderError(
             "Gemini gcloud auth is enabled but no Application Default Credentials were "
             "found. Run `gcloud auth application-default login` (and "
             "`gcloud config set project <project>` or set GOOGLE_CLOUD_PROJECT)."
-        ) from exc
-    except ValueError as exc:
-        raise ProviderError(
-            f"Gemini gcloud auth is enabled but the Vertex AI client could not be built: {exc} "
-            "Set GOOGLE_CLOUD_PROJECT (and optionally GOOGLE_CLOUD_LOCATION)."
         ) from exc
 
 
