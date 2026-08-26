@@ -157,6 +157,9 @@ class GeminiProvider(ModelProvider):
         location: str | None = None,
     ) -> None:
         super().__init__(None if use_gcloud_auth else api_key, default_model)
+        self._project = project
+        self._location = location
+        self._reload_lock = asyncio.Lock()
         if use_gcloud_auth:
             self.auth_mode = "gcloud-adc"
             self.client = _gemini_vertex_client(project=project, location=location)
@@ -210,19 +213,36 @@ class GeminiProvider(ModelProvider):
         return await self._call(call)
 
     async def _call(self, fn: Callable[[], Any]) -> Any:
-        """Run a blocking SDK call, translating expired ADC into actionable advice.
+        """Run a blocking SDK call, reloading ADC once if the credential is stale.
 
-        ADC access tokens last an hour, so a long-running server will hit this.
+        Access tokens are refreshed by google-auth transparently, so a RefreshError
+        means the underlying grant is gone: revoked, or expired under an org reauth
+        policy. Re-running the login command writes a fresh ADC file, but the
+        credential object loaded at construction keeps the dead refresh token, so
+        the client is rebuilt from disk before giving up. That way logging in again
+        is enough, with no server restart.
         """
         try:
             return await asyncio.to_thread(fn)
         except google_auth_exceptions.RefreshError as exc:
-            if self.auth_mode == "gcloud-adc":
+            if self.auth_mode != "gcloud-adc":
+                raise
+            await self._reload_credentials()
+            try:
+                return await asyncio.to_thread(fn)
+            except google_auth_exceptions.RefreshError as retry_exc:
                 raise ProviderError(
-                    "Gemini gcloud credentials could not be refreshed. Run "
+                    "Gemini gcloud credentials could not be refreshed, and reloading "
+                    "Application Default Credentials did not help. Run "
                     f"`gcloud auth application-default login` again ({exc})."
-                ) from exc
-            raise
+                ) from retry_exc
+
+    async def _reload_credentials(self) -> None:
+        """Rebuild the client so a freshly written ADC file is picked up."""
+        async with self._reload_lock:
+            self.client = await asyncio.to_thread(
+                _gemini_vertex_client, project=self._project, location=self._location
+            )
 
 
 class ProviderRegistry:

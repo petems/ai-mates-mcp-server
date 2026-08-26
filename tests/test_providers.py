@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from google.auth.credentials import AnonymousCredentials
@@ -739,14 +739,49 @@ async def test_list_models_reports_auth_mode_and_errors():
     assert result["provider_errors"] == {}
 
 
+async def test_stale_adc_is_reloaded_and_the_call_retried():
+    """Logging in again should be enough; the client is rebuilt from the new file."""
+    with (
+        fake_adc() as mock_default,
+        patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls,
+    ):
+        stale, fresh = MagicMock(), MagicMock()
+        stale.models.generate_content.side_effect = RefreshError("invalid_grant")
+        fresh.models.generate_content.return_value = SimpleNamespace(text="ok", usage_metadata=None)
+        mock_client_cls.side_effect = [stale, fresh]
+        provider = GeminiProvider(None, "gemini-2.5-pro", use_gcloud_auth=True)
+
+        response = await provider.complete("hello")
+
+    assert response.content == "ok"
+    assert mock_client_cls.call_count == 2
+    assert mock_default.call_count == 2
+    assert provider.client is fresh
+
+
 async def test_expired_adc_is_translated_into_actionable_error():
+    """When reloading does not help either, the message says what to run."""
     with fake_adc(), patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
         client = mock_client_cls.return_value
         client.models.generate_content.side_effect = RefreshError("invalid_grant")
         provider = GeminiProvider(None, "gemini-2.5-pro", use_gcloud_auth=True)
 
-    with pytest.raises(ProviderError, match="application-default login"):
-        await provider.complete("hello")
+        with pytest.raises(ProviderError, match="application-default login"):
+            await provider.complete("hello")
+
+
+async def test_reload_failure_surfaces_the_login_hint():
+    with fake_adc(), patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
+        client = mock_client_cls.return_value
+        client.models.list.side_effect = RefreshError("invalid_grant")
+        provider = GeminiProvider(None, "gemini-2.5-pro", use_gcloud_auth=True)
+
+        with patch(
+            "ai_mates_mcp_server.providers.google.auth.default",
+            side_effect=DefaultCredentialsError("ADC file gone"),
+        ):
+            with pytest.raises(ProviderError, match="application-default login"):
+                await provider.list_model_ids()
 
 
 async def test_refresh_error_is_not_swallowed_for_api_key_auth():
@@ -755,5 +790,7 @@ async def test_refresh_error_is_not_swallowed_for_api_key_auth():
         client.models.list.side_effect = RefreshError("invalid_grant")
         provider = GeminiProvider("my-key", "gemini-2.5-pro")
 
-    with pytest.raises(RefreshError):
-        await provider.list_model_ids()
+        with pytest.raises(RefreshError):
+            await provider.list_model_ids()
+
+        assert mock_client_cls.call_count == 1

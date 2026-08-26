@@ -248,9 +248,13 @@ Things worth knowing:
 - Model IDs are the same, but Vertex only serves the models available in your
   project and region. `listmodels` reports the auth mode per provider under
   `provider_auth`.
-- ADC access tokens last an hour. If one expires while the server is running,
-  the Gemini tool call fails with "Run `gcloud auth application-default login`
-  again" rather than a raw OAuth `invalid_grant` error.
+- ADC access tokens last an hour, but that expiry is invisible: `google-auth`
+  refreshes them for you. What does break is the underlying grant being revoked,
+  or expiring under an org reauth policy. When that happens, run
+  `gcloud auth application-default login` again and carry on — the next Gemini
+  call reloads credentials from the rewritten ADC file, so the server does not
+  need restarting. If it still fails after that, the error says so explicitly
+  rather than surfacing a raw OAuth `invalid_grant`.
 - If ADC is missing or the project cannot be resolved, the rest of the server
   still starts. The Gemini failure is reported under `provider_errors` in
   `listmodels` and in the error returned when you ask for a Gemini model:
