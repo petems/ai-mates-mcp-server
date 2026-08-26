@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import google.auth
@@ -374,10 +375,7 @@ class ProviderRegistry:
         return {
             "defaults": self.model_registry.provider_aliases(),
             "configured_providers": sorted(self.providers),
-            "provider_auth": {
-                name: getattr(provider, "auth_mode", "api-key")
-                for name, provider in sorted(self.providers.items())
-            },
+            "provider_auth": self._provider_auth_report(),
             "provider_errors": dict(sorted(self.provider_errors.items())),
             "discovery": self.settings.model_discovery,
             "live_errors": live_errors,
@@ -388,6 +386,75 @@ class ProviderRegistry:
             "deprecated_model_count": len(self.model_registry.deprecated_entries),
             "deprecated_models_included": include_deprecated,
         }
+
+    def _provider_auth_report(self) -> dict[str, dict[str, Any]]:
+        return {
+            "openai": self._api_key_auth_report("OPENAI_API_KEY", self.settings.openai_api_key),
+            "anthropic": self._api_key_auth_report(
+                "ANTHROPIC_API_KEY",
+                self.settings.anthropic_api_key,
+            ),
+            "gemini": self._gemini_auth_report(),
+        }
+
+    def _api_key_auth_report(self, source: str, api_key: str | None) -> dict[str, Any]:
+        return {
+            "mode": "api-key",
+            "state": "present" if api_key else "missing",
+            "source": source if api_key else None,
+        }
+
+    def _gemini_auth_report(self) -> dict[str, Any]:
+        if not self.settings.gemini_use_gcloud_auth:
+            return self._api_key_auth_report("GEMINI_API_KEY", self.settings.gemini_api_key)
+
+        report: dict[str, Any] = {
+            "mode": "gcloud-adc",
+            "state": "unknown",
+            "quota_project": None,
+            "credential_type": "unknown",
+        }
+        try:
+            credentials, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            report["quota_project"] = getattr(credentials, "quota_project_id", None)
+            report["credential_type"] = self._credential_type(credentials)
+            expiry = getattr(credentials, "expiry", None)
+            if isinstance(expiry, datetime):
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=UTC)
+                report["expires_at"] = expiry.astimezone(UTC).isoformat().replace(
+                    "+00:00",
+                    "Z",
+                )
+            expired = bool(getattr(credentials, "expired", False))
+            if expired:
+                report["state"] = "expired"
+                report["hint"] = "Run `gcloud auth application-default login` again."
+            else:
+                report["state"] = "valid"
+        except google_auth_exceptions.DefaultCredentialsError:
+            report["state"] = "missing"
+            report["hint"] = (
+                "Run `gcloud auth application-default login` and set a project with "
+                "`gcloud config set project <project>` or GOOGLE_CLOUD_PROJECT."
+            )
+        except Exception:
+            report["state"] = "unknown"
+            report["hint"] = (
+                "Could not inspect gcloud ADC credentials locally. Run "
+                "`gcloud auth application-default login` and retry."
+            )
+        return report
+
+    def _credential_type(self, credentials: Any) -> str:
+        if hasattr(credentials, "service_account_email"):
+            return "service_account"
+        module = getattr(getattr(credentials, "__class__", None), "__module__", "")
+        if module.startswith("google.oauth2.credentials"):
+            return "authorized_user"
+        return "unknown"
 
     def _provider_default_or_none(self, provider_name: ProviderName) -> str | None:
         try:
