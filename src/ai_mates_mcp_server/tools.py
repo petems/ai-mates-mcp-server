@@ -94,6 +94,7 @@ async def run_consensus(
     models: list[dict[str, Any]],
     initial_analysis: str | None = None,
     relevant_files: list[str] | None = None,
+    workspace_root: str | None = None,
     continuation_id: str | None = None,
     registry: ProviderRegistry | None = None,
 ) -> str:
@@ -103,6 +104,7 @@ async def run_consensus(
             models=[ModelConfig.model_validate(model) for model in models],
             initial_analysis=initial_analysis,
             relevant_files=relevant_files or [],
+            workspace_root=workspace_root,
             continuation_id=continuation_id,
         )
     except ValidationError as exc:
@@ -110,7 +112,11 @@ async def run_consensus(
 
     thread = store.create_or_get("consensus", request.continuation_id)
     provider_registry = registry or ProviderRegistry()
-    context = build_context(request.relevant_files, store.context(thread.id))
+    context = build_context(
+        request.relevant_files,
+        store.context(thread.id),
+        request.workspace_root,
+    )
     prompt = _join_prompt(
         request.proposal,
         ("Initial neutral analysis:\n" + request.initial_analysis)
@@ -136,11 +142,30 @@ async def run_consensus(
             "usage": response.usage,
         }
 
-    responses = await asyncio.gather(*(consult(model_config) for model_config in request.models))
+    results = await asyncio.gather(
+        *(consult(model_config) for model_config in request.models),
+        return_exceptions=True,
+    )
+    responses: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for model_config, result in zip(request.models, results, strict=True):
+        if isinstance(result, Exception):
+            errors.append(
+                {
+                    "requested_model": model_config.model,
+                    "stance": model_config.stance,
+                    "error_type": type(result).__name__,
+                    "error": str(result),
+                }
+            )
+        else:
+            responses.append(result)
     data = {
         "proposal": request.proposal,
         "initial_analysis": request.initial_analysis,
+        "workspace_root": request.workspace_root,
         "responses": responses,
+        "errors": errors,
         "synthesis_instructions": [
             "Identify agreements across models.",
             "Identify disagreements and the assumptions behind them.",
@@ -150,9 +175,13 @@ async def run_consensus(
     }
     store.add_turn(thread.id, "consensus", data)
     envelope = ToolEnvelope(
-        status="consensus_complete",
+        status="consensus_complete" if responses else "error",
         continuation_id=thread.id,
-        next_steps="Synthesize the returned model perspectives into a single recommendation.",
+        next_steps=(
+            "Synthesize the returned model perspectives into a single recommendation."
+            if responses
+            else "Resolve the provider/model errors and retry consensus."
+        ),
         data=data,
     )
     return envelope.model_dump_json(indent=2)
@@ -163,6 +192,7 @@ async def run_codereview(
     step: str,
     findings: str = "",
     relevant_files: list[str] | None = None,
+    workspace_root: str | None = None,
     files_checked: list[str] | None = None,
     relevant_context: list[str] | None = None,
     issues_found: list[dict[str, Any]] | None = None,
@@ -180,6 +210,7 @@ async def run_codereview(
             step=step,
             findings=findings,
             relevant_files=relevant_files or [],
+            workspace_root=workspace_root,
             files_checked=files_checked or [],
             relevant_context=relevant_context or [],
             issues_found=issues_found or [],
@@ -202,6 +233,7 @@ async def run_codereview(
         "severity_filter": request.severity_filter,
         "files_checked": request.files_checked,
         "relevant_files": request.relevant_files,
+        "workspace_root": request.workspace_root,
         "relevant_context": request.relevant_context,
         "issues_found": [issue.model_dump() for issue in request.issues_found],
         "findings": request.findings,
@@ -211,7 +243,11 @@ async def run_codereview(
     if request.use_assistant_model:
         provider_registry = registry or ProviderRegistry()
         provider, routed_model = provider_registry.resolve(request.model)
-        context = build_context(request.relevant_files, store.context(thread.id))
+        context = build_context(
+            request.relevant_files,
+            store.context(thread.id),
+            request.workspace_root,
+        )
         prompt = _join_prompt(
             f"Review request:\n{request.step}",
             f"Review type: {request.review_type}",

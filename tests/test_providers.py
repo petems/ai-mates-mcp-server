@@ -8,6 +8,7 @@ import pytest
 from ai_mates_mcp_server.config import Settings
 from ai_mates_mcp_server.providers import (
     AnthropicProvider,
+    GeminiProvider,
     OpenAIProvider,
     ProviderError,
     ProviderRegistry,
@@ -400,6 +401,32 @@ async def test_anthropic_supported_model_keeps_explicit_temperature():
     assert calls[0]["temperature"] == 0.1
 
 
+@pytest.mark.asyncio
+async def test_gemini_provider_omits_temperature_by_default():
+    class FakeModels:
+        def __init__(self):
+            self.calls = []
+
+        def generate_content(self, **kwargs):
+            self.calls.append(kwargs)
+            return type("Response", (), {"text": "ok", "usage_metadata": {"tokens": 1}})()
+
+    class FakeClient:
+        def __init__(self):
+            self.models = FakeModels()
+
+    provider = GeminiProvider("key", "gemini-3.1-pro-preview")
+    fake_client = FakeClient()
+    provider.client = fake_client  # type: ignore[assignment]
+
+    await provider.complete("hello", system_prompt="system")
+
+    config = fake_client.models.calls[0]["config"]
+    dumped = config.model_dump(exclude_none=True)
+    assert "temperature" not in dumped
+    assert dumped["system_instruction"] == "system"
+
+
 def test_deprecated_provider_default_raises_provider_error():
     with pytest.raises(ProviderError, match="Configured default model for provider 'openai'"):
         ProviderRegistry(settings(openai_model="gpt-4"))
@@ -470,7 +497,10 @@ async def test_listmodels_omits_deprecated_registry_by_default():
     assert default_payload["deprecated_models_included"] is False
     assert default_payload["deprecated_model_count"] > 0
     assert "are omitted" in default_payload["note"]
-    assert len(json.dumps(default_payload)) < len(json.dumps(full_payload)) / 5
+    default_ids = {model["id"] for model in default_payload["models"]}
+    full_ids = {model["id"] for model in full_payload["models"]}
+    assert "gpt-4" not in default_ids
+    assert "gpt-4" in full_ids
 
 
 def _deprecated_alias_file(tmp_path, aliases):

@@ -9,12 +9,15 @@ from ai_mates_mcp_server.tools import run_codereview, run_consensus, run_listmod
 
 
 class FakeProvider:
-    def __init__(self, provider: str) -> None:
+    def __init__(self, provider: str, *, fail: bool = False) -> None:
         self.provider = provider
+        self.fail = fail
         self.calls = []
 
     async def complete(self, prompt: str, **kwargs):
         self.calls.append({"prompt": prompt, **kwargs})
+        if self.fail:
+            raise RuntimeError(f"{self.provider} failed")
         return ProviderResponse(
             provider=self.provider,
             model=kwargs["model"],
@@ -24,9 +27,9 @@ class FakeProvider:
 
 
 class FakeRegistry:
-    def __init__(self) -> None:
-        self.openai = FakeProvider("openai")
-        self.anthropic = FakeProvider("anthropic")
+    def __init__(self, *, fail_openai: bool = False, fail_anthropic: bool = False) -> None:
+        self.openai = FakeProvider("openai", fail=fail_openai)
+        self.anthropic = FakeProvider("anthropic", fail=fail_anthropic)
         self.gemini = FakeProvider("gemini")
 
     def resolve(self, model=None):
@@ -102,6 +105,54 @@ async def test_consensus_consults_multiple_models():
     assert len(registry.anthropic.calls) == 1
     assert "temperature" not in registry.openai.calls[0]
     assert "temperature" not in registry.anthropic.calls[0]
+
+
+@pytest.mark.asyncio
+async def test_consensus_returns_partial_results_when_one_model_fails():
+    registry = FakeRegistry(fail_anthropic=True)
+    result = json.loads(
+        await run_consensus(
+            proposal="Should we keep the scope small?",
+            models=[
+                {"model": "openai", "stance": "for"},
+                {"model": "anthropic", "stance": "against"},
+            ],
+            registry=registry,
+        )
+    )
+
+    assert result["status"] == "consensus_complete"
+    assert [response["provider"] for response in result["data"]["responses"]] == ["openai"]
+    assert result["data"]["errors"] == [
+        {
+            "requested_model": "anthropic",
+            "stance": "against",
+            "error_type": "RuntimeError",
+            "error": "anthropic failed",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_consensus_returns_error_when_all_models_fail():
+    registry = FakeRegistry(fail_openai=True, fail_anthropic=True)
+    result = json.loads(
+        await run_consensus(
+            proposal="Should we keep the scope small?",
+            models=[
+                {"model": "openai", "stance": "for"},
+                {"model": "anthropic", "stance": "against"},
+            ],
+            registry=registry,
+        )
+    )
+
+    assert result["status"] == "error"
+    assert result["data"]["responses"] == []
+    assert [error["requested_model"] for error in result["data"]["errors"]] == [
+        "openai",
+        "anthropic",
+    ]
 
 
 @pytest.mark.asyncio

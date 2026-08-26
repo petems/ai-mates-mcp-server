@@ -213,6 +213,10 @@ Model names can be exact API IDs or aliases from the registry. Common aliases
 include `openai`, `gpt`, `sonnet`, `opus`, `haiku`, `gemini`, `pro`, `flash`,
 `mini`, and `nano`.
 
+When passing `relevant_files`, also pass `workspace_root`. File reads are
+restricted to that workspace, symlinks and `..` are resolved before access, and
+sensitive files such as `.env`, cloud credentials, and private keys are blocked.
+
 ### `codereview`
 
 Runs a structured code-review workflow. It can use local findings only or call a
@@ -220,6 +224,9 @@ configured assistant model for validation.
 
 Set `use_assistant_model` to `false` when you only want the MCP tool to package
 and track your own review findings.
+
+Like `consensus`, `codereview` requires `workspace_root` when `relevant_files`
+are supplied.
 
 ### `listmodels`
 
