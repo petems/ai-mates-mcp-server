@@ -71,10 +71,11 @@ class OpenAIProvider(ModelProvider):
                 kwargs: dict[str, Any] = {
                     "model": model_name,
                     "input": prompt,
-                    "instructions": system_prompt,
                     "max_output_tokens": max_tokens,
                     **_temperature_kwargs(self.name, model_name, temperature),
                 }
+                if system_prompt:
+                    kwargs["instructions"] = system_prompt
                 response = await self.client.responses.create(**kwargs)
                 content = _extract_openai_response_text(response)
                 usage = _dump_usage(getattr(response, "usage", None))
@@ -372,7 +373,7 @@ def _temperature_kwargs(
 
 def _supports_temperature(provider: ProviderName, model: str) -> bool:
     normalized = model.lower()
-    return not normalized.startswith(UNSUPPORTED_TEMPERATURE_PREFIXES[provider])
+    return not normalized.startswith(UNSUPPORTED_TEMPERATURE_PREFIXES.get(provider, ()))
 
 
 def _dump_usage(usage: Any) -> dict | None:

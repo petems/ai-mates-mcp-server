@@ -1957,8 +1957,7 @@
       "deprecation_date": "2026-06-11",
       "shutdown_date": "2026-12-11",
       "replacement_models": [
-        "gpt-5.6-sol",
-        "reasoning.mode: pro"
+        "gpt-5.6-sol"
       ],
       "source_url": "https://platform.openai.com/docs/deprecations#2026-06-11-gpt-5-and-o3-model-deprecations"
     },
@@ -2266,8 +2265,7 @@
       "deprecation_date": "2026-06-11",
       "shutdown_date": "2026-12-11",
       "replacement_models": [
-        "gpt-5.6-sol",
-        "reasoning.mode: pro"
+        "gpt-5.6-sol"
       ],
       "source_url": "https://platform.openai.com/docs/deprecations#2026-06-11-gpt-5-and-o3-model-deprecations"
     },
