@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
 
+import google.auth
 from anthropic import AsyncAnthropic
 from google import genai
+from google.auth import exceptions as google_auth_exceptions
 from google.genai import types as genai_types
 from openai import AsyncOpenAI
 
@@ -27,8 +30,9 @@ UNSUPPORTED_TEMPERATURE_PREFIXES: dict[ProviderName, tuple[str, ...]] = {
 
 class ModelProvider(ABC):
     name: ProviderName
+    auth_mode: str = "api-key"
 
-    def __init__(self, api_key: str, default_model: str) -> None:
+    def __init__(self, api_key: str | None, default_model: str) -> None:
         self.api_key = api_key
         self.default_model = default_model
 
@@ -143,9 +147,28 @@ class AnthropicProvider(ModelProvider):
 class GeminiProvider(ModelProvider):
     name: ProviderName = "gemini"
 
-    def __init__(self, api_key: str, default_model: str) -> None:
-        super().__init__(api_key, default_model)
-        self.client = genai.Client(api_key=api_key)
+    def __init__(
+        self,
+        api_key: str | None,
+        default_model: str,
+        *,
+        use_gcloud_auth: bool = False,
+        project: str | None = None,
+        location: str | None = None,
+    ) -> None:
+        super().__init__(None if use_gcloud_auth else api_key, default_model)
+        self._project = project
+        self._location = location
+        self._reload_lock = asyncio.Lock()
+        if use_gcloud_auth:
+            self.auth_mode = "gcloud-adc"
+            self.client = _gemini_vertex_client(project=project, location=location)
+        else:
+            if not api_key:
+                raise ProviderError(
+                    "GeminiProvider needs an API key unless use_gcloud_auth is enabled."
+                )
+            self.client = genai.Client(api_key=api_key)
 
     async def complete(
         self,
@@ -170,7 +193,7 @@ class GeminiProvider(ModelProvider):
                 config=config,
             )
 
-        response = await asyncio.to_thread(call)
+        response = await self._call(call)
         return ProviderResponse(
             provider=self.name,
             model=model_name,
@@ -182,14 +205,44 @@ class GeminiProvider(ModelProvider):
         def call() -> list[str]:
             model_ids: list[str] = []
             for model in self.client.models.list():
-                name = getattr(model, "name", "")
-                if name.startswith("models/"):
-                    name = name.removeprefix("models/")
+                name = _normalize_gemini_model_name(getattr(model, "name", ""))
                 if name:
                     model_ids.append(name)
             return sorted(set(model_ids))
 
-        return await asyncio.to_thread(call)
+        return await self._call(call)
+
+    async def _call(self, fn: Callable[[], Any]) -> Any:
+        """Run a blocking SDK call, reloading ADC once if the credential is stale.
+
+        Access tokens are refreshed by google-auth transparently, so a RefreshError
+        means the underlying grant is gone: revoked, or expired under an org reauth
+        policy. Re-running the login command writes a fresh ADC file, but the
+        credential object loaded at construction keeps the dead refresh token, so
+        the client is rebuilt from disk before giving up. That way logging in again
+        is enough, with no server restart.
+        """
+        try:
+            return await asyncio.to_thread(fn)
+        except google_auth_exceptions.RefreshError as exc:
+            if self.auth_mode != "gcloud-adc":
+                raise
+            await self._reload_credentials()
+            try:
+                return await asyncio.to_thread(fn)
+            except google_auth_exceptions.RefreshError as retry_exc:
+                raise ProviderError(
+                    "Gemini gcloud credentials could not be refreshed, and reloading "
+                    "Application Default Credentials did not help. Run "
+                    f"`gcloud auth application-default login` again ({exc})."
+                ) from retry_exc
+
+    async def _reload_credentials(self) -> None:
+        """Rebuild the client so a freshly written ADC file is picked up."""
+        async with self._reload_lock:
+            self.client = await asyncio.to_thread(
+                _gemini_vertex_client, project=self._project, location=self._location
+            )
 
 
 class ProviderRegistry:
@@ -205,6 +258,7 @@ class ProviderRegistry:
             allow_deprecated=self.settings.allow_deprecated_models,
         )
         self.providers: dict[ProviderName, ModelProvider] = {}
+        self.provider_errors: dict[ProviderName, str] = {}
         if self.settings.openai_api_key:
             self.providers["openai"] = OpenAIProvider(
                 self.settings.openai_api_key,
@@ -215,11 +269,25 @@ class ProviderRegistry:
                 self.settings.anthropic_api_key,
                 self._provider_default("anthropic"),
             )
-        if self.settings.gemini_api_key:
+        if self.settings.gemini_use_gcloud_auth or self.settings.gemini_api_key:
+            self._configure_gemini()
+
+    def _configure_gemini(self) -> None:
+        """Build the Gemini provider, preferring gcloud ADC when it is opted into.
+
+        A broken ADC setup must not take the whole server down, so the failure is
+        recorded and surfaced when Gemini is actually requested.
+        """
+        try:
             self.providers["gemini"] = GeminiProvider(
                 self.settings.gemini_api_key,
                 self._provider_default("gemini"),
+                use_gcloud_auth=self.settings.gemini_use_gcloud_auth,
+                project=self.settings.gemini_project,
+                location=self.settings.gemini_location,
             )
+        except ProviderError as exc:
+            self.provider_errors["gemini"] = str(exc)
 
     def available_models(self) -> dict[str, str]:
         return self.model_registry.provider_aliases()
@@ -232,8 +300,10 @@ class ProviderRegistry:
                 if provider:
                     return provider, provider.default_model
             raise ProviderError(
-                "No AI provider configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, "
-                "or GEMINI_API_KEY."
+                self._augment_error(
+                    "No AI provider configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, "
+                    "GEMINI_API_KEY, or GEMINI_USE_GCLOUD_AUTH=true."
+                )
             )
 
         normalized = requested.lower()
@@ -276,10 +346,20 @@ class ProviderRegistry:
     ) -> tuple[ModelProvider, str]:
         provider = self.providers.get(provider_name)
         if not provider:
-            raise ProviderError(
+            detail = self.provider_errors.get(provider_name)
+            message = (
                 f"Model '{model}' requires {provider_name}, but that provider is not configured."
             )
+            raise ProviderError(f"{message} {detail}" if detail else message)
         return provider, model
+
+    def _augment_error(self, message: str) -> str:
+        if not self.provider_errors:
+            return message
+        details = "; ".join(
+            f"{name}: {error}" for name, error in sorted(self.provider_errors.items())
+        )
+        return f"{message} Provider setup errors: {details}"
 
     async def list_models(self, *, include_deprecated: bool = False) -> dict[str, Any]:
         live_errors: dict[str, str] = {}
@@ -294,6 +374,11 @@ class ProviderRegistry:
         return {
             "defaults": self.model_registry.provider_aliases(),
             "configured_providers": sorted(self.providers),
+            "provider_auth": {
+                name: getattr(provider, "auth_mode", "api-key")
+                for name, provider in sorted(self.providers.items())
+            },
+            "provider_errors": dict(sorted(self.provider_errors.items())),
             "discovery": self.settings.model_discovery,
             "live_errors": live_errors,
             "models": self.model_registry.list_entries(
@@ -316,6 +401,54 @@ class ProviderRegistry:
         return self._provider_default_or_none(provider_name) or getattr(
             self.settings, f"{provider_name}_model"
         )
+
+
+def _gemini_vertex_client(*, project: str | None, location: str | None) -> genai.Client:
+    """Create a Vertex AI client backed by Application Default Credentials.
+
+    Plain ``genai.Client()`` talks to the Gemini Developer API, which only accepts
+    API keys. ADC (``gcloud auth application-default login``) is a Vertex AI path,
+    so ``vertexai=True`` is required for gcloud credentials to be used at all.
+
+    Credentials and project are resolved here and passed explicitly rather than
+    left to the SDK. Given only ``vertexai=True``, the SDK falls back to
+    ``GEMINI_API_KEY``/``GOOGLE_API_KEY`` from the environment and never loads ADC
+    at all, which would quietly authenticate with the key this mode exists to avoid.
+    """
+    credentials, adc_project = _load_adc()
+    kwargs: dict[str, Any] = {"vertexai": True, "credentials": credentials}
+    resolved_project = project or adc_project
+    if resolved_project:
+        kwargs["project"] = resolved_project
+    if location:
+        kwargs["location"] = location
+    try:
+        return genai.Client(**kwargs)
+    except ValueError as exc:
+        raise ProviderError(
+            f"Gemini gcloud auth is enabled but the Vertex AI client could not be built: {exc} "
+            "Set GOOGLE_CLOUD_PROJECT (and optionally GOOGLE_CLOUD_LOCATION)."
+        ) from exc
+
+
+def _load_adc() -> tuple[Any, str | None]:
+    try:
+        return google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    except google_auth_exceptions.DefaultCredentialsError as exc:
+        raise ProviderError(
+            "Gemini gcloud auth is enabled but no Application Default Credentials were "
+            "found. Run `gcloud auth application-default login` (and "
+            "`gcloud config set project <project>` or set GOOGLE_CLOUD_PROJECT)."
+        ) from exc
+
+
+def _normalize_gemini_model_name(name: str) -> str:
+    """Strip the Developer API (`models/`) and Vertex (`publishers/...`) prefixes."""
+    if not name:
+        return ""
+    if "/models/" in name:
+        return name.rsplit("/models/", 1)[1]
+    return name.removeprefix("models/")
 
 
 def _extract_openai_response_text(response: Any) -> str:

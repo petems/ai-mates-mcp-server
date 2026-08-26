@@ -20,6 +20,9 @@ class Settings:
     openai_api_key: str | None
     anthropic_api_key: str | None
     gemini_api_key: str | None
+    gemini_use_gcloud_auth: bool
+    gemini_project: str | None
+    gemini_location: str | None
     openai_model: str
     anthropic_model: str
     gemini_model: str
@@ -41,12 +44,34 @@ def _int_env(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _gcloud_auth_enabled() -> bool:
+    """Opt in to Vertex AI + Application Default Credentials for Gemini.
+
+    ``GEMINI_USE_GCLOUD_AUTH`` is our own friendly name; ``GOOGLE_GENAI_USE_VERTEXAI``
+    is the variable the google-genai SDK reads, so honour it too for people who
+    already have it exported.
+    """
+    return _bool_env("GEMINI_USE_GCLOUD_AUTH", False) or _bool_env(
+        "GOOGLE_GENAI_USE_VERTEXAI", False
+    )
+
+
 def load_settings() -> Settings:
     return Settings(
         default_model=os.getenv("DEFAULT_MODEL", "auto"),
         openai_api_key=os.getenv("OPENAI_API_KEY") or None,
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
         gemini_api_key=os.getenv("GEMINI_API_KEY") or None,
+        gemini_use_gcloud_auth=_gcloud_auth_enabled(),
+        gemini_project=os.getenv("GOOGLE_CLOUD_PROJECT") or None,
+        gemini_location=os.getenv("GOOGLE_CLOUD_LOCATION") or None,
         openai_model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
         anthropic_model=os.getenv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL),
         gemini_model=os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
@@ -56,10 +81,3 @@ def load_settings() -> Settings:
         model_discovery=os.getenv("MATES_MODEL_DISCOVERY", "off").strip().lower(),
         allow_deprecated_models=_bool_env("MATES_ALLOW_DEPRECATED_MODELS", False),
     )
-
-
-def _bool_env(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}

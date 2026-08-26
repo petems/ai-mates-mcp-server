@@ -270,7 +270,7 @@ def _string_list(
     """Parse a model entry's list-of-strings field, dropping blank values."""
     if raw is None:
         raw = []
-    if not isinstance(raw, (list, tuple)):
+    if not isinstance(raw, list | tuple):
         raise ModelRegistryError(f"Model entry {field} for '{model_id}' must be an array")
     values = []
     for value in raw:

@@ -30,7 +30,9 @@ uvx ai-mates-mcp-server
 ## MCP Configuration
 
 Set at least one API key in your client config. Leave unused providers out or
-replace their placeholders before starting the client.
+replace their placeholders before starting the client. Gemini can also run
+without an API key via gcloud Application Default Credentials, see
+[Gemini without an API key (gcloud ADC)](#gemini-without-an-api-key-gcloud-adc).
 
 ### Claude Code
 
@@ -186,6 +188,78 @@ export GEMINI_MODEL=gemini-3.1-pro-preview
 export DEFAULT_MODEL=auto
 ```
 
+## Gemini without an API key (gcloud ADC)
+
+Google's guidance for local development is to avoid long-lived API keys and
+service account keys, and use Application Default Credentials instead: tokens
+auto-refresh and expire after an hour.
+
+Set it up once:
+
+```bash
+gcloud auth application-default login
+gcloud config set project <your-project>
+gcloud services enable aiplatform.googleapis.com --project <your-project>
+```
+
+Then run the server with:
+
+```bash
+export GEMINI_USE_GCLOUD_AUTH=true
+export GOOGLE_CLOUD_PROJECT=<your-project>   # optional if gcloud already has one
+export GOOGLE_CLOUD_LOCATION=global          # optional, defaults to global
+```
+
+Or in an MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "mates": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/petems/ai-mates-mcp-server.git",
+        "ai-mates-mcp-server"
+      ],
+      "env": {
+        "GEMINI_USE_GCLOUD_AUTH": "true",
+        "GOOGLE_CLOUD_PROJECT": "<your-project>"
+      }
+    }
+  }
+}
+```
+
+Things worth knowing:
+
+- ADC only works through **Vertex AI**, not the Gemini Developer API, so this
+  flag makes the server build a Vertex AI client (`vertexai=True`). You need a
+  GCP project with the Vertex AI API enabled and the `roles/aiplatform.user`
+  role.
+- `GEMINI_USE_GCLOUD_AUTH=true` wins over `GEMINI_API_KEY` and `GOOGLE_API_KEY`.
+  The explicit opt-in is treated as the stronger signal, so an API key left over
+  in your shell does not silently take over. Credentials are resolved up front
+  and passed to the SDK explicitly to keep that promise: given only
+  `vertexai=True`, the SDK would fall back to either of those environment keys
+  and never load ADC.
+- `GOOGLE_GENAI_USE_VERTEXAI=true` (the variable the google-genai SDK reads)
+  works as an alias if you already export it.
+- Model IDs are the same, but Vertex only serves the models available in your
+  project and region. `listmodels` reports the auth mode per provider under
+  `provider_auth`.
+- ADC access tokens last an hour, but that expiry is invisible: `google-auth`
+  refreshes them for you. What does break is the underlying grant being revoked,
+  or expiring under an org reauth policy. When that happens, run
+  `gcloud auth application-default login` again and carry on — the next Gemini
+  call reloads credentials from the rewritten ADC file, so the server does not
+  need restarting. If it still fails after that, the error says so explicitly
+  rather than surfacing a raw OAuth `invalid_grant`.
+- If ADC is missing or the project cannot be resolved, the rest of the server
+  still starts. The Gemini failure is reported under `provider_errors` in
+  `listmodels` and in the error returned when you ask for a Gemini model:
+  "Run `gcloud auth application-default login`".
+
 ## Tools
 
 ### `planner`
@@ -223,8 +297,9 @@ and track your own review findings.
 
 ### `listmodels`
 
-Lists model IDs, aliases, provider defaults, status, and whether each provider is
-configured. By default this uses the packaged and local registry only.
+Lists model IDs, aliases, provider defaults, status, the auth mode used per
+provider (`api-key` or `gcloud-adc`), any provider setup errors, and whether each
+provider is configured. By default this uses the packaged and local registry only.
 
 Set `MATES_MODEL_DISCOVERY=list` to make `listmodels` augment the registry with
 live provider model-list API results when API keys are configured.
