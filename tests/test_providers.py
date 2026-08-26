@@ -216,6 +216,30 @@ def test_local_config_cannot_reactivate_deprecated_model(tmp_path):
         registry.resolve("gpt-4")
 
 
+def test_local_alias_cannot_bypass_deprecated_model(tmp_path):
+    models_file = tmp_path / "mates-models.json"
+    models_file.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "id": "gpt-4",
+                        "provider": "openai",
+                        "aliases": ["old-gpt"],
+                        "rank": 999,
+                        "status": "active",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = ProviderRegistry(settings(models_file=str(models_file)))
+
+    with pytest.raises(ProviderError, match="deprecated"):
+        registry.resolve("old-gpt")
+
+
 def test_deprecated_model_metadata_is_listed():
     registry = ProviderRegistry(settings())
 

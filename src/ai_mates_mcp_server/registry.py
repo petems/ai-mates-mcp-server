@@ -137,7 +137,12 @@ class ModelRegistry:
         entry = self.entries.get(key)
         if not entry:
             target = self.aliases.get(key)
-            entry = self.entries.get(target) if target else None
+            if target:
+                entry = self.deprecated_entries.get(target)
+                if entry:
+                    self._validate_status(entry)
+                    return entry
+                entry = self.entries.get(target)
         if entry:
             self._validate_status(entry)
         return entry
