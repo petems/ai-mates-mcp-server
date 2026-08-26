@@ -77,6 +77,11 @@ SENSITIVE_DIR_SEQUENCES = ((".config", "gcloud"),)
 
 MAX_FILE_BYTES = 1_000_000
 
+# Bounds on directory expansion so a huge workspace cannot burn CPU/memory
+# building a file list that would be discarded by the context-size limit.
+MAX_WALK_FILES = 2_000
+MAX_WALK_ENTRIES = 50_000
+
 
 def build_context(
     relevant_files: list[str],
@@ -146,6 +151,7 @@ def _resolve_workspace_root(raw_root: str) -> Path:
 def _expand_relevant_paths(paths: list[str], root: Path) -> list[tuple[Path, str | None]]:
     expanded: list[tuple[Path, str | None]] = []
     seen: set[Path] = set()
+    budget = MAX_WALK_FILES
     for raw_path in paths:
         path, marker = _resolve_requested_path(raw_path, root)
         if marker:
@@ -158,10 +164,22 @@ def _expand_relevant_paths(paths: list[str], root: Path) -> list[tuple[Path, str
             seen.add(path)
             continue
         if path.is_dir():
-            for file_path in _walk_directory(path, root):
+            walked, truncated = _walk_directory(path, root, budget)
+            budget -= len(walked)
+            for file_path in walked:
                 if file_path not in seen:
                     expanded.append((file_path, None))
                     seen.add(file_path)
+            if truncated:
+                expanded.append(
+                    (
+                        path,
+                        f"--- {raw_path} ---\n"
+                        f"[truncated: directory expansion limit of "
+                        f"{MAX_WALK_FILES} files reached]",
+                    )
+                )
+                break
     return sorted(expanded, key=lambda item: str(item[0]))
 
 
@@ -181,18 +199,30 @@ def _resolve_requested_path(raw_path: str, root: Path) -> tuple[Path, str | None
         return path, f"--- {raw_path} ---\n[missing]"
     if not path.is_file() and not path.is_dir():
         return path, f"--- {raw_path} ---\n[not a file or directory]"
+    if _has_excluded_component(path, root):
+        return path, f"--- {raw_path} ---\n[blocked: excluded directory]"
     return path, None
 
 
-def _walk_directory(path: Path, workspace_root: Path) -> list[Path]:
+def _walk_directory(path: Path, workspace_root: Path, limit: int) -> tuple[list[Path], bool]:
+    """Collect files under ``path``, stopping once ``limit`` files are gathered.
+
+    Returns the files found and whether the walk was cut short by a budget.
+    """
     files: list[Path] = []
+    if limit <= 0:
+        return files, True
+    scanned = 0
     for root, dirnames, filenames in os.walk(path):
-        dirnames[:] = [
+        dirnames[:] = sorted(
             dirname
             for dirname in dirnames
             if not dirname.startswith(".") and dirname not in EXCLUDED_DIRS
-        ]
-        for filename in filenames:
+        )
+        for filename in sorted(filenames):
+            scanned += 1
+            if scanned > MAX_WALK_ENTRIES:
+                return files, True
             if filename.startswith("."):
                 continue
             file_path = (Path(root) / filename).resolve()
@@ -201,7 +231,9 @@ def _walk_directory(path: Path, workspace_root: Path) -> list[Path]:
             if _is_sensitive_path(file_path, workspace_root):
                 continue
             files.append(file_path)
-    return files
+            if len(files) >= limit:
+                return files, True
+    return files, False
 
 
 def _read_file(path: Path, root: Path) -> str:
@@ -253,8 +285,25 @@ def _is_home_root(path: Path) -> bool:
 
 
 def _is_sensitive_workspace_root(path: Path) -> bool:
-    lowered_parts = {part.lower() for part in path.parts}
-    return bool(lowered_parts & SENSITIVE_ROOT_DIRS)
+    lowered_parts = [part.lower() for part in path.parts]
+    if set(lowered_parts) & SENSITIVE_ROOT_DIRS:
+        return True
+    return _contains_sensitive_sequence(lowered_parts)
+
+
+def _contains_sensitive_sequence(lowered_parts: list[str]) -> bool:
+    for sequence in SENSITIVE_DIR_SEQUENCES:
+        width = len(sequence)
+        for index in range(len(lowered_parts) - width + 1):
+            if tuple(lowered_parts[index : index + width]) == sequence:
+                return True
+    return False
+
+
+def _has_excluded_component(path: Path, root: Path) -> bool:
+    relative = path.relative_to(root)
+    parts = relative.parts if path.is_dir() else relative.parts[:-1]
+    return any(part in EXCLUDED_DIRS for part in parts)
 
 
 def _is_sensitive_path(path: Path, root: Path) -> bool:
@@ -262,13 +311,10 @@ def _is_sensitive_path(path: Path, root: Path) -> bool:
     lowered_parts = [part.lower() for part in relative.parts]
     if SENSITIVE_DIR_COMPONENTS.intersection(lowered_parts):
         return True
-    for sequence in SENSITIVE_DIR_SEQUENCES:
-        width = len(sequence)
-        for index in range(len(lowered_parts) - width + 1):
-            if tuple(lowered_parts[index : index + width]) == sequence:
-                return True
-    relative_posix = relative.as_posix()
-    name = path.name
+    if _contains_sensitive_sequence(lowered_parts):
+        return True
+    relative_posix = relative.as_posix().lower()
+    name = path.name.lower()
     for pattern in SENSITIVE_PATH_PATTERNS:
         if fnmatch.fnmatch(relative_posix, pattern) or fnmatch.fnmatch(name, pattern):
             return True

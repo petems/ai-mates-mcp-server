@@ -125,3 +125,63 @@ def test_blocks_sensitive_directory_as_workspace_root(tmp_path):
     assert "blocked: invalid workspace root" in result
     assert "sensitive directory" in result
     assert "top-secret" not in result
+
+
+def test_blocks_gcloud_directory_as_workspace_root(tmp_path):
+    gcloud_root = tmp_path / ".config" / "gcloud"
+    gcloud_root.mkdir(parents=True)
+    (gcloud_root / "access_tokens.db").write_text("gcloud-token-value", encoding="utf-8")
+
+    result = read_relevant_files(["access_tokens.db"], str(gcloud_root))
+
+    assert "blocked: invalid workspace root" in result
+    assert "sensitive directory" in result
+    assert "gcloud-token-value" not in result
+
+
+def test_sensitive_patterns_match_case_insensitively(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".ENV").write_text("API_KEY=top-secret", encoding="utf-8")
+    (project / "SECRET.PEM").write_text("-----BEGIN KEY-----", encoding="utf-8")
+
+    result = read_relevant_files(["project/.ENV", "project/SECRET.PEM"], str(tmp_path))
+
+    assert result.count("blocked: sensitive file") == 2
+    assert "top-secret" not in result
+    assert "BEGIN KEY" not in result
+
+
+def test_blocks_directly_requested_excluded_directory_file(tmp_path):
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    (git_dir / "config").write_text("url = git@github.com:owner/private.git", encoding="utf-8")
+
+    result = read_relevant_files([".git/config"], str(tmp_path))
+
+    assert "blocked: excluded directory" in result
+    assert "owner/private" not in result
+
+
+def test_blocks_directly_requested_dependency_directory(tmp_path):
+    modules = tmp_path / "node_modules" / "pkg"
+    modules.mkdir(parents=True)
+    (modules / "index.js").write_text("module.exports = 'dependency-body'", encoding="utf-8")
+
+    result = read_relevant_files(["node_modules"], str(tmp_path))
+
+    assert "blocked: excluded directory" in result
+    assert "dependency-body" not in result
+
+
+def test_directory_expansion_is_bounded(tmp_path, monkeypatch):
+    monkeypatch.setattr("ai_mates_mcp_server.context.MAX_WALK_FILES", 3)
+    project = tmp_path / "project"
+    project.mkdir()
+    for index in range(10):
+        (project / f"file_{index:02d}.txt").write_text(f"body-{index}", encoding="utf-8")
+
+    result = read_relevant_files(["project"], str(tmp_path))
+
+    assert "directory expansion limit" in result
+    assert result.count("body-") == 3

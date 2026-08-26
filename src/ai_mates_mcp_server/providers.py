@@ -66,28 +66,8 @@ class OpenAIProvider(ModelProvider):
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> ProviderResponse:
         model_name = model or self.default_model
-        if hasattr(self.client, "responses"):
-            try:
-                kwargs: dict[str, Any] = {
-                    "model": model_name,
-                    "input": prompt,
-                    "max_output_tokens": max_tokens,
-                    **_temperature_kwargs(self.name, model_name, temperature),
-                }
-                if system_prompt:
-                    kwargs["instructions"] = system_prompt
-                response = await self.client.responses.create(**kwargs)
-                content = _extract_openai_response_text(response)
-                usage = _dump_usage(getattr(response, "usage", None))
-            except AttributeError:
-                return await self._complete_chat(
-                    prompt,
-                    model_name=model_name,
-                    system_prompt=system_prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-        else:
+        create_response = getattr(getattr(self.client, "responses", None), "create", None)
+        if not callable(create_response):
             return await self._complete_chat(
                 prompt,
                 model_name=model_name,
@@ -96,6 +76,17 @@ class OpenAIProvider(ModelProvider):
                 max_tokens=max_tokens,
             )
 
+        kwargs: dict[str, Any] = {
+            "model": model_name,
+            "input": prompt,
+            "max_output_tokens": max_tokens,
+            **_temperature_kwargs(self.name, model_name, temperature),
+        }
+        if system_prompt:
+            kwargs["instructions"] = system_prompt
+        response = await create_response(**kwargs)
+        content = _extract_openai_response_text(response)
+        usage = _dump_usage(getattr(response, "usage", None))
         return ProviderResponse(provider=self.name, model=model_name, content=content, usage=usage)
 
     async def _complete_chat(

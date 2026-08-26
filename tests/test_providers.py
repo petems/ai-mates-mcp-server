@@ -564,3 +564,55 @@ def test_replacing_deprecated_entry_drops_its_stale_aliases():
 
     assert "old-a" not in registry.aliases
     assert registry.aliases["old-b"] == "gpt-4"
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_failure_does_not_retry_via_chat():
+    chat_calls = []
+
+    class FakeResponses:
+        async def create(self, **kwargs):
+            raise AttributeError("boom inside the Responses request")
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            chat_calls.append(kwargs)
+            message = SimpleNamespace(content="ok")
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+
+    provider = OpenAIProvider.__new__(OpenAIProvider)
+    provider.api_key = "openai-key"
+    provider.default_model = "gpt-5.5"
+    provider.client = SimpleNamespace(
+        responses=FakeResponses(),
+        chat=SimpleNamespace(completions=FakeCompletions()),
+    )
+
+    with pytest.raises(AttributeError):
+        await provider.complete("Review this")
+
+    assert chat_calls == []
+
+
+@pytest.mark.asyncio
+async def test_openai_falls_back_to_chat_when_responses_endpoint_is_unusable():
+    chat_calls = []
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            chat_calls.append(kwargs)
+            message = SimpleNamespace(content="ok")
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+
+    provider = OpenAIProvider.__new__(OpenAIProvider)
+    provider.api_key = "openai-key"
+    provider.default_model = "gpt-4.1"
+    provider.client = SimpleNamespace(
+        responses=SimpleNamespace(),
+        chat=SimpleNamespace(completions=FakeCompletions()),
+    )
+
+    response = await provider.complete("Review this")
+
+    assert response.content == "ok"
+    assert len(chat_calls) == 1
