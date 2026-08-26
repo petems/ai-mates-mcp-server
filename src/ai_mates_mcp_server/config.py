@@ -20,6 +20,7 @@ class Settings:
     openai_api_key: str | None
     anthropic_api_key: str | None
     gemini_api_key: str | None
+    gemini_use_gcloud_auth: bool
     openai_model: str
     anthropic_model: str
     gemini_model: str
@@ -47,6 +48,7 @@ def load_settings() -> Settings:
         openai_api_key=os.getenv("OPENAI_API_KEY") or None,
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
         gemini_api_key=os.getenv("GEMINI_API_KEY") or None,
+        gemini_use_gcloud_auth=_bool_env("GEMINI_USE_GCLOUD_AUTH", False),
         openai_model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
         anthropic_model=os.getenv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL),
         gemini_model=os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),

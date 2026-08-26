@@ -143,9 +143,14 @@ class AnthropicProvider(ModelProvider):
 class GeminiProvider(ModelProvider):
     name: ProviderName = "gemini"
 
-    def __init__(self, api_key: str, default_model: str) -> None:
-        super().__init__(api_key, default_model)
-        self.client = genai.Client(api_key=api_key)
+    def __init__(
+        self, api_key: str | None, default_model: str, *, use_gcloud_auth: bool = False
+    ) -> None:
+        super().__init__(api_key or "", default_model)
+        if use_gcloud_auth:
+            self.client = genai.Client()
+        else:
+            self.client = genai.Client(api_key=api_key)
 
     async def complete(
         self,
@@ -220,6 +225,12 @@ class ProviderRegistry:
                 self.settings.gemini_api_key,
                 self._provider_default("gemini"),
             )
+        elif self.settings.gemini_use_gcloud_auth:
+            self.providers["gemini"] = GeminiProvider(
+                None,
+                self._provider_default("gemini"),
+                use_gcloud_auth=True,
+            )
 
     def available_models(self) -> dict[str, str]:
         return self.model_registry.provider_aliases()
@@ -233,7 +244,7 @@ class ProviderRegistry:
                     return provider, provider.default_model
             raise ProviderError(
                 "No AI provider configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, "
-                "or GEMINI_API_KEY."
+                "GEMINI_API_KEY, or GEMINI_USE_GCLOUD_AUTH=true."
             )
 
         normalized = requested.lower()

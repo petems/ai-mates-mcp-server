@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,6 +22,7 @@ def settings(**overrides):
         "openai_api_key": "openai-key",
         "anthropic_api_key": None,
         "gemini_api_key": None,
+        "gemini_use_gcloud_auth": False,
         "openai_model": "gpt-4.1",
         "anthropic_model": "claude-sonnet-4-5",
         "gemini_model": "gemini-3.1-pro-preview",
@@ -534,3 +536,44 @@ def test_replacing_deprecated_entry_drops_its_stale_aliases():
 
     assert "old-a" not in registry.aliases
     assert registry.aliases["old-b"] == "gpt-4"
+def test_gemini_gcloud_auth_configures_provider():
+    with patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
+        mock_client_cls.return_value = MagicMock()
+        registry = ProviderRegistry(
+            settings(openai_api_key=None, gemini_use_gcloud_auth=True)
+        )
+
+    assert "gemini" in registry.providers
+    mock_client_cls.assert_called_once_with()
+
+
+def test_gemini_api_key_takes_precedence_over_gcloud_auth():
+    with patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
+        mock_client_cls.return_value = MagicMock()
+        registry = ProviderRegistry(
+            settings(openai_api_key=None, gemini_api_key="my-key", gemini_use_gcloud_auth=True)
+        )
+
+    assert "gemini" in registry.providers
+    mock_client_cls.assert_called_once_with(api_key="my-key")
+
+
+def test_gemini_gcloud_auth_resolves_provider():
+    with patch("ai_mates_mcp_server.providers.genai.Client") as mock_client_cls:
+        mock_client_cls.return_value = MagicMock()
+        registry = ProviderRegistry(
+            settings(openai_api_key=None, gemini_use_gcloud_auth=True)
+        )
+
+    provider, model = registry.resolve("gemini")
+
+    assert provider.name == "gemini"
+    assert model == "gemini-2.5-pro"
+
+
+def test_no_gemini_auth_configured_does_not_add_gemini_provider():
+    registry = ProviderRegistry(
+        settings(openai_api_key=None, gemini_api_key=None, gemini_use_gcloud_auth=False)
+    )
+
+    assert "gemini" not in registry.providers
