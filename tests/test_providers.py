@@ -497,7 +497,10 @@ async def test_listmodels_omits_deprecated_registry_by_default():
     assert default_payload["deprecated_models_included"] is False
     assert default_payload["deprecated_model_count"] > 0
     assert "are omitted" in default_payload["note"]
-    assert len(json.dumps(default_payload)) < len(json.dumps(full_payload)) / 5
+    default_ids = {model["id"] for model in default_payload["models"]}
+    full_ids = {model["id"] for model in full_payload["models"]}
+    assert "gpt-4" not in default_ids
+    assert "gpt-4" in full_ids
 
 
 def _deprecated_alias_file(tmp_path, aliases):

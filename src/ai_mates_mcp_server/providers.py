@@ -67,31 +67,58 @@ class OpenAIProvider(ModelProvider):
     ) -> ProviderResponse:
         model_name = model or self.default_model
         if hasattr(self.client, "responses"):
-            kwargs: dict[str, Any] = {
-                "model": model_name,
-                "input": prompt,
-                "instructions": system_prompt,
-                "max_output_tokens": max_tokens,
-                **_temperature_kwargs(self.name, model_name, temperature),
-            }
-            response = await self.client.responses.create(**kwargs)
-            content = _extract_openai_response_text(response)
-            usage = _dump_usage(getattr(response, "usage", None))
+            try:
+                kwargs: dict[str, Any] = {
+                    "model": model_name,
+                    "input": prompt,
+                    "instructions": system_prompt,
+                    "max_output_tokens": max_tokens,
+                    **_temperature_kwargs(self.name, model_name, temperature),
+                }
+                response = await self.client.responses.create(**kwargs)
+                content = _extract_openai_response_text(response)
+                usage = _dump_usage(getattr(response, "usage", None))
+            except AttributeError:
+                return await self._complete_chat(
+                    prompt,
+                    model_name=model_name,
+                    system_prompt=system_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
         else:
-            messages: list[dict[str, str]] = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
-            kwargs: dict[str, Any] = {
-                "model": model_name,
-                "messages": messages,
-                "max_tokens": max_tokens,
-                **_temperature_kwargs(self.name, model_name, temperature),
-            }
-            response = await self.client.chat.completions.create(**kwargs)
-            content = response.choices[0].message.content or ""
-            usage = _dump_usage(getattr(response, "usage", None))
+            return await self._complete_chat(
+                prompt,
+                model_name=model_name,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
 
+        return ProviderResponse(provider=self.name, model=model_name, content=content, usage=usage)
+
+    async def _complete_chat(
+        self,
+        prompt: str,
+        *,
+        model_name: str,
+        system_prompt: str | None,
+        temperature: float | None,
+        max_tokens: int,
+    ) -> ProviderResponse:
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            **_temperature_kwargs(self.name, model_name, temperature),
+        }
+        response = await self.client.chat.completions.create(**kwargs)
+        content = response.choices[0].message.content or ""
+        usage = _dump_usage(getattr(response, "usage", None))
         return ProviderResponse(provider=self.name, model=model_name, content=content, usage=usage)
 
     async def list_model_ids(self) -> list[str]:
@@ -119,10 +146,11 @@ class AnthropicProvider(ModelProvider):
         kwargs: dict[str, Any] = {
             "model": model_name,
             "max_tokens": max_tokens,
-            "system": system_prompt,
             "messages": [{"role": "user", "content": prompt}],
             **_temperature_kwargs(self.name, model_name, temperature),
         }
+        if system_prompt:
+            kwargs["system"] = system_prompt
         response = await self.client.messages.create(**kwargs)
         text_parts = [
             block.text for block in response.content if getattr(block, "type", None) == "text"
