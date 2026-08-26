@@ -412,6 +412,17 @@
       "source_url": "https://platform.claude.com/docs/en/about-claude/model-deprecations#2024-09-04-claude-1-and-instant-models"
     },
     {
+      "id": "claude-opus-4-1-20250805",
+      "provider": "anthropic",
+      "status": "retired",
+      "deprecation_date": "2026-06-05",
+      "shutdown_date": "2026-08-05",
+      "replacement_models": [
+        "claude-opus-4-8"
+      ],
+      "source_url": "https://platform.claude.com/docs/en/about-claude/model-deprecations#2026-06-05-claude-opus-4-1-model"
+    },
+    {
       "id": "claude-opus-4-20250514",
       "provider": "anthropic",
       "status": "deprecated",
@@ -441,6 +452,17 @@
       "shutdown_date": "2025-10-30",
       "replacement_models": [
         "gemini-embedding-001"
+      ],
+      "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#embedding-models"
+    },
+    {
+      "id": "embedding-2-preview",
+      "provider": "gemini",
+      "status": "retired",
+      "deprecation_date": "2026-08-10",
+      "shutdown_date": "2026-08-10",
+      "replacement_models": [
+        "gemini-embedding-2"
       ],
       "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#embedding-models"
     },
@@ -818,6 +840,17 @@
       "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#gemini-2.5-pro-models"
     },
     {
+      "id": "gemini-3-pro-image-preview",
+      "provider": "gemini",
+      "status": "retired",
+      "deprecation_date": "2026-06-25",
+      "shutdown_date": "2026-06-25",
+      "replacement_models": [
+        "gemini-3-pro-image"
+      ],
+      "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#gemini-3-models"
+    },
+    {
       "id": "gemini-3-pro-preview",
       "provider": "gemini",
       "status": "retired",
@@ -825,6 +858,17 @@
       "shutdown_date": "2026-03-09",
       "replacement_models": [
         "gemini-3.1-pro-preview"
+      ],
+      "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#gemini-3-models"
+    },
+    {
+      "id": "gemini-3.1-flash-image-preview",
+      "provider": "gemini",
+      "status": "retired",
+      "deprecation_date": "2026-06-25",
+      "shutdown_date": "2026-06-25",
+      "replacement_models": [
+        "gemini-3.1-flash-image"
       ],
       "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#gemini-3-models"
     },
@@ -898,6 +942,17 @@
       "shutdown_date": "2026-04-30",
       "replacement_models": [
         "gemini-robotics-er-1.6-preview"
+      ],
+      "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#robotics-models"
+    },
+    {
+      "id": "gemini-robotics-er-1.6-preview",
+      "provider": "gemini",
+      "status": "deprecated",
+      "deprecation_date": "2026-08-31",
+      "shutdown_date": "2026-08-31",
+      "replacement_models": [
+        "gemini-robotics-er-2-preview"
       ],
       "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#robotics-models"
     },
@@ -982,6 +1037,28 @@
       "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#embedding-models"
     },
     {
+      "id": "veo-2.0-generate-001",
+      "provider": "gemini",
+      "status": "retired",
+      "deprecation_date": "2026-06-30",
+      "shutdown_date": "2026-06-30",
+      "replacement_models": [
+        "veo-3.1-generate-preview"
+      ],
+      "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#veo-models"
+    },
+    {
+      "id": "veo-3.0-fast-generate-001",
+      "provider": "gemini",
+      "status": "retired",
+      "deprecation_date": "2026-06-30",
+      "shutdown_date": "2026-06-30",
+      "replacement_models": [
+        "veo-3.1-fast-generate-preview"
+      ],
+      "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#veo-models"
+    },
+    {
       "id": "veo-3.0-fast-generate-preview",
       "provider": "gemini",
       "status": "retired",
@@ -989,6 +1066,17 @@
       "shutdown_date": "2025-11-12",
       "replacement_models": [
         "veo-3.1-fast-generate-preview"
+      ],
+      "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#veo-models"
+    },
+    {
+      "id": "veo-3.0-generate-001",
+      "provider": "gemini",
+      "status": "retired",
+      "deprecation_date": "2026-06-30",
+      "shutdown_date": "2026-06-30",
+      "replacement_models": [
+        "veo-3.1-generate-preview"
       ],
       "source_url": "https://ai.google.dev/gemini-api/docs/deprecations#veo-models"
     },
@@ -1047,6 +1135,17 @@
         "gpt-5.1-chat-latest"
       ],
       "source_url": "https://platform.openai.com/docs/deprecations#2025-11-18-chatgpt-4o-latest-snapshot"
+    },
+    {
+      "id": "chatgpt-image-latest",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-06-02",
+      "shutdown_date": "2026-12-01",
+      "replacement_models": [
+        "gpt-image-2"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-06-02-gpt-image-model-deprecations"
     },
     {
       "id": "code-cushman-001",
@@ -1632,6 +1731,17 @@
       "source_url": "https://platform.openai.com/docs/deprecations#2026-04-22-legacy-gpt-model-snapshots"
     },
     {
+      "id": "gpt-4o-audio",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-07-20",
+      "shutdown_date": "2027-01-20",
+      "replacement_models": [
+        "gpt-audio-1.5"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
+    },
+    {
       "id": "gpt-4o-audio-preview",
       "provider": "openai",
       "status": "retired",
@@ -1654,6 +1764,17 @@
       "source_url": "https://platform.openai.com/docs/deprecations#2025-06-10-gpt-4o-audio-preview-2024-10-01"
     },
     {
+      "id": "gpt-4o-mini-audio",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-07-20",
+      "shutdown_date": "2027-01-20",
+      "replacement_models": [
+        "gpt-audio-1.5"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
+    },
+    {
       "id": "gpt-4o-mini-audio-preview",
       "provider": "openai",
       "status": "retired",
@@ -1663,6 +1784,17 @@
         "gpt-audio-mini"
       ],
       "source_url": "https://platform.openai.com/docs/deprecations#2025-09-15-gpt-4o-realtime-preview-models"
+    },
+    {
+      "id": "gpt-4o-mini-realtime",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-07-20",
+      "shutdown_date": "2027-01-20",
+      "replacement_models": [
+        "gpt-realtime-2.1-mini"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
     },
     {
       "id": "gpt-4o-mini-realtime-preview",
@@ -1687,6 +1819,17 @@
       "source_url": "https://platform.openai.com/docs/deprecations#2026-04-22-legacy-gpt-model-snapshots"
     },
     {
+      "id": "gpt-4o-mini-transcribe-2025-03-20",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-07-20",
+      "shutdown_date": "2027-01-20",
+      "replacement_models": [
+        "gpt-4o-mini-transcribe-2025-12-15"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
+    },
+    {
       "id": "gpt-4o-mini-tts-2025-03-20",
       "provider": "openai",
       "status": "deprecated",
@@ -1696,6 +1839,17 @@
         "gpt-4o-mini-tts-2025-12-15"
       ],
       "source_url": "https://platform.openai.com/docs/deprecations#2026-04-22-legacy-gpt-model-snapshots"
+    },
+    {
+      "id": "gpt-4o-realtime",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-07-20",
+      "shutdown_date": "2027-01-20",
+      "replacement_models": [
+        "gpt-realtime-2.1"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
     },
     {
       "id": "gpt-4o-realtime-preview",
@@ -1753,6 +1907,17 @@
       "source_url": "https://platform.openai.com/docs/deprecations#2026-04-22-legacy-gpt-model-snapshots"
     },
     {
+      "id": "gpt-5-2025-08-07",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-06-11",
+      "shutdown_date": "2026-12-11",
+      "replacement_models": [
+        "gpt-5.6-sol"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-06-11-gpt-5-and-o3-model-deprecations"
+    },
+    {
       "id": "gpt-5-chat-latest",
       "provider": "openai",
       "status": "deprecated",
@@ -1773,6 +1938,40 @@
         "gpt-5.5"
       ],
       "source_url": "https://platform.openai.com/docs/deprecations#2026-04-22-legacy-gpt-model-snapshots"
+    },
+    {
+      "id": "gpt-5-mini-2025-08-07",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-06-11",
+      "shutdown_date": "2026-12-11",
+      "replacement_models": [
+        "gpt-5.6-terra"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-06-11-gpt-5-and-o3-model-deprecations"
+    },
+    {
+      "id": "gpt-5-nano-2025-08-07",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-06-11",
+      "shutdown_date": "2026-12-11",
+      "replacement_models": [
+        "gpt-5.6-luna"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-06-11-gpt-5-and-o3-model-deprecations"
+    },
+    {
+      "id": "gpt-5-pro-2025-10-06",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-06-11",
+      "shutdown_date": "2026-12-11",
+      "replacement_models": [
+        "gpt-5.6-sol",
+        "reasoning.mode: pro"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-06-11-gpt-5-and-o3-model-deprecations"
     },
     {
       "id": "gpt-5.1-chat-latest",
@@ -1852,6 +2051,28 @@
       "source_url": "https://platform.openai.com/docs/deprecations#2026-05-08-gpt-5-2-chat-latest-and-gpt-5-3-chat-latest-model-snapshots"
     },
     {
+      "id": "gpt-audio",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-07-20",
+      "shutdown_date": "2027-01-20",
+      "replacement_models": [
+        "gpt-audio-1.5"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
+    },
+    {
+      "id": "gpt-audio-mini",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-07-20",
+      "shutdown_date": "2027-01-20",
+      "replacement_models": [
+        "gpt-audio-1.5"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
+    },
+    {
       "id": "gpt-audio-mini-2025-10-06",
       "provider": "openai",
       "status": "deprecated",
@@ -1872,6 +2093,50 @@
         "gpt-image-2"
       ],
       "source_url": "https://platform.openai.com/docs/deprecations#2026-04-22-legacy-gpt-model-snapshots"
+    },
+    {
+      "id": "gpt-image-1-mini",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-06-02",
+      "shutdown_date": "2026-12-01",
+      "replacement_models": [
+        "gpt-image-2"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-06-02-gpt-image-model-deprecations"
+    },
+    {
+      "id": "gpt-image-1.5",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-06-02",
+      "shutdown_date": "2026-12-01",
+      "replacement_models": [
+        "gpt-image-2"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-06-02-gpt-image-model-deprecations"
+    },
+    {
+      "id": "gpt-realtime",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-07-20",
+      "shutdown_date": "2027-01-20",
+      "replacement_models": [
+        "gpt-realtime-2.1"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
+    },
+    {
+      "id": "gpt-realtime-mini",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-07-20",
+      "shutdown_date": "2027-01-20",
+      "replacement_models": [
+        "gpt-realtime-2.1-mini"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
     },
     {
       "id": "gpt-realtime-mini-2025-10-06",
@@ -1951,6 +2216,17 @@
       "source_url": "https://platform.openai.com/docs/deprecations#2026-04-22-legacy-gpt-model-snapshots"
     },
     {
+      "id": "o3-2025-04-16",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-06-11",
+      "shutdown_date": "2026-12-11",
+      "replacement_models": [
+        "gpt-5.6-sol"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-06-11-gpt-5-and-o3-model-deprecations"
+    },
+    {
       "id": "o3-deep-research",
       "provider": "openai",
       "status": "deprecated",
@@ -1993,6 +2269,18 @@
         "gpt-5.5"
       ],
       "source_url": "https://platform.openai.com/docs/deprecations#2026-04-22-legacy-gpt-model-snapshots"
+    },
+    {
+      "id": "o3-pro-2025-06-10",
+      "provider": "openai",
+      "status": "deprecated",
+      "deprecation_date": "2026-06-11",
+      "shutdown_date": "2026-12-11",
+      "replacement_models": [
+        "gpt-5.6-sol",
+        "reasoning.mode: pro"
+      ],
+      "source_url": "https://platform.openai.com/docs/deprecations#2026-06-11-gpt-5-and-o3-model-deprecations"
     },
     {
       "id": "o4-mini",
