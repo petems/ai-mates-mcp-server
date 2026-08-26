@@ -1830,17 +1830,6 @@
       "source_url": "https://platform.openai.com/docs/deprecations#2026-07-20-legacy-audio-realtime-and-transcription-models"
     },
     {
-      "id": "gpt-4o-mini-tts-2025-03-20",
-      "provider": "openai",
-      "status": "deprecated",
-      "deprecation_date": "2026-04-22",
-      "shutdown_date": "2026-07-23",
-      "replacement_models": [
-        "gpt-4o-mini-tts-2025-12-15"
-      ],
-      "source_url": "https://platform.openai.com/docs/deprecations#2026-04-22-legacy-gpt-model-snapshots"
-    },
-    {
       "id": "gpt-4o-realtime",
       "provider": "openai",
       "status": "deprecated",
