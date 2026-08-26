@@ -73,9 +73,7 @@ SENSITIVE_DIR_COMPONENTS = {
 }
 
 # Consecutive directory components that together identify a sensitive location.
-SENSITIVE_DIR_SEQUENCES = (
-    (".config", "gcloud"),
-)
+SENSITIVE_DIR_SEQUENCES = ((".config", "gcloud"),)
 
 MAX_FILE_BYTES = 1_000_000
 

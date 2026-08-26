@@ -266,6 +266,17 @@ Local entries replace packaged entries with the same `id`, and local aliases win
 when there is a collision. Deprecated, retired, or shut-down models are blocked
 unless `MATES_ALLOW_DEPRECATED_MODELS=true`.
 
+Packaged model data separates reachable defaults from blocked model IDs:
+
+- `models`: current, reachable, recommended model IDs and aliases.
+- `deprecated_models`: OpenAI, Anthropic, and Google/Gemini model IDs sourced
+  from the deprecations.info feed, including deprecation dates, shutdown dates,
+  replacement models, and source URLs.
+
+Exact requests for models in `deprecated_models` are blocked before provider
+prefix fallback can route them. Keep deprecated and near-shutdown models out of
+the active `models` list.
+
 ## Development
 
 ```bash

@@ -26,6 +26,10 @@ class ModelEntry:
     source: str = "packaged"
     live_discovered: bool = False
     description: str | None = None
+    deprecation_date: str | None = None
+    shutdown_date: str | None = None
+    replacement_models: tuple[str, ...] = ()
+    source_url: str | None = None
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any], *, source: str) -> ModelEntry:
@@ -40,21 +44,14 @@ class ModelEntry:
         if not model_id:
             raise ModelRegistryError("Model entry id cannot be empty")
 
-        raw_aliases = data.get("aliases", [])
-        if raw_aliases is None:
-            raw_aliases = []
-        if not isinstance(raw_aliases, (list, tuple)):
-            raise ModelRegistryError(
-                f"Model entry aliases for '{model_id}' must be an array"
-            )
-        aliases = []
-        for alias in raw_aliases:
-            if not isinstance(alias, str):
-                raise ModelRegistryError(
-                    f"Model entry aliases for '{model_id}' must be strings"
-                )
-            if alias.strip():
-                aliases.append(_normalize_key(alias))
+        aliases = _string_list(data.get("aliases"), field="aliases", model_id=model_id)
+        replacement_models = _string_list(
+            data.get("replacement_models"),
+            field="replacement_models",
+            model_id=model_id,
+            normalize=False,
+        )
+
         return cls(
             id=model_id,
             provider=provider,  # type: ignore[arg-type]
@@ -63,6 +60,10 @@ class ModelEntry:
             status=str(data.get("status", "active")).strip().lower(),
             source=source,
             description=data.get("description"),
+            deprecation_date=data.get("deprecation_date"),
+            shutdown_date=data.get("shutdown_date"),
+            replacement_models=tuple(replacement_models),
+            source_url=data.get("source_url"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -75,6 +76,10 @@ class ModelEntry:
             "source": self.source,
             "live_discovered": self.live_discovered,
             "description": self.description,
+            "deprecation_date": self.deprecation_date,
+            "shutdown_date": self.shutdown_date,
+            "replacement_models": list(self.replacement_models),
+            "source_url": self.source_url,
         }
 
 
@@ -88,6 +93,7 @@ class ModelRegistry:
     ) -> None:
         self.allow_deprecated = allow_deprecated
         self.entries: dict[str, ModelEntry] = {}
+        self.deprecated_entries: dict[str, ModelEntry] = {}
         self.aliases: dict[str, str] = {}
         self.defaults: dict[ProviderName, str] = {}
         self._load_packaged()
@@ -104,10 +110,20 @@ class ModelRegistry:
 
     def resolve(self, model: str) -> ModelEntry | None:
         key = _normalize_key(model)
+        entry = self.deprecated_entries.get(key)
+        if entry:
+            self._validate_status(entry)
+            return entry
+
         entry = self.entries.get(key)
         if not entry:
             target = self.aliases.get(key)
-            entry = self.entries.get(target) if target else None
+            if target:
+                entry = self.deprecated_entries.get(target)
+                if entry:
+                    self._validate_status(entry)
+                    return entry
+                entry = self.entries.get(target)
         if entry:
             self._validate_status(entry)
         return entry
@@ -124,6 +140,8 @@ class ModelRegistry:
 
     def add_live_model(self, provider: ProviderName, model_id: str) -> None:
         key = _normalize_key(model_id)
+        if key in self.deprecated_entries:
+            return
         if key in self.entries:
             self.entries[key] = replace(self.entries[key], live_discovered=True)
             return
@@ -139,15 +157,29 @@ class ModelRegistry:
     def list_entries(
         self,
         configured_providers: set[ProviderName] | None = None,
+        *,
+        include_deprecated: bool = False,
     ) -> list[dict[str, Any]]:
         rows = []
         for entry in self.entries.values():
+            if _normalize_key(entry.id) in self.deprecated_entries:
+                continue
             row = entry.to_dict()
             row["configured"] = (
                 entry.provider in configured_providers if configured_providers is not None else None
             )
             row["is_default"] = self.defaults.get(entry.provider) == entry.id
             rows.append(row)
+        if include_deprecated:
+            for entry in self.deprecated_entries.values():
+                row = entry.to_dict()
+                row["configured"] = (
+                    entry.provider in configured_providers
+                    if configured_providers is not None
+                    else None
+                )
+                row["is_default"] = False
+                rows.append(row)
         rows.sort(key=lambda item: (item["provider"], -item["rank"], item["id"]))
         return rows
 
@@ -190,6 +222,23 @@ class ModelRegistry:
             for alias in entry.aliases:
                 self.aliases[alias] = key
 
+        for raw_entry in data.get("deprecated_models", []):
+            entry = ModelEntry.from_mapping(raw_entry, source=source)
+            if entry.status not in DEPRECATED_STATUSES:
+                raise ModelRegistryError(
+                    f"Model '{entry.id}' in deprecated_models has non-deprecated status "
+                    f"'{entry.status}'. Allowed statuses: {', '.join(sorted(DEPRECATED_STATUSES))}."
+                )
+            key = _normalize_key(entry.id)
+            old_entry = self.deprecated_entries.get(key)
+            if old_entry:
+                for alias in old_entry.aliases:
+                    if self.aliases.get(alias) == key:
+                        del self.aliases[alias]
+            self.deprecated_entries[key] = entry
+            for alias in entry.aliases:
+                self.aliases[alias] = key
+
     def _validate_status(self, entry: ModelEntry) -> None:
         if entry.status in ACTIVE_STATUSES:
             return
@@ -211,10 +260,30 @@ def _normalize_key(value: str) -> str:
     return value.strip().lower()
 
 
+def _string_list(
+    raw: Any,
+    *,
+    field: str,
+    model_id: str,
+    normalize: bool = True,
+) -> list[str]:
+    """Parse a model entry's list-of-strings field, dropping blank values."""
+    if raw is None:
+        raw = []
+    if not isinstance(raw, (list, tuple)):
+        raise ModelRegistryError(f"Model entry {field} for '{model_id}' must be an array")
+    values = []
+    for value in raw:
+        if not isinstance(value, str):
+            raise ModelRegistryError(f"Model entry {field} for '{model_id}' must be strings")
+        if value.strip():
+            values.append(_normalize_key(value) if normalize else value.strip())
+    return values
+
+
 def _validate_default_model_id(provider: str, model_id: Any, *, source: str) -> str:
     if not isinstance(model_id, str) or not model_id.strip():
         raise ModelRegistryError(
-            f"Invalid default model id for provider '{provider}' in {source} data: "
-            f"{model_id!r}"
+            f"Invalid default model id for provider '{provider}' in {source} data: {model_id!r}"
         )
     return model_id.strip()

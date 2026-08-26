@@ -3,13 +3,22 @@ from __future__ import annotations
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from .tools import run_codereview, run_consensus, run_listmodels, run_planner, tool_error
 
 mcp = FastMCP("AI Mates")
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Planner",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    )
+)
 async def planner(
     step: str,
     step_number: int,
@@ -42,7 +51,15 @@ async def planner(
         return tool_error(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Consensus",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    )
+)
 async def consensus(
     proposal: str,
     models: list[dict[str, Any]],
@@ -65,7 +82,15 @@ async def consensus(
         return tool_error(exc)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Code Review",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    )
+)
 async def codereview(
     step: str,
     findings: str = "",
@@ -104,11 +129,23 @@ async def codereview(
         return tool_error(exc)
 
 
-@mcp.tool()
-async def listmodels() -> str:
-    """List configured model aliases, defaults, statuses, and optional live discovery data."""
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="List Models",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    )
+)
+async def listmodels(include_deprecated: bool = False) -> str:
+    """List configured model aliases, defaults, statuses, and optional live discovery data.
+
+    Set include_deprecated=True to also return the blocked/deprecated model registry, which is
+    large and omitted by default.
+    """
     try:
-        return await run_listmodels()
+        return await run_listmodels(include_deprecated=include_deprecated)
     except Exception as exc:
         return tool_error(exc)
 

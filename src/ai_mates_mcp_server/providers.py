@@ -18,6 +18,13 @@ class ProviderError(RuntimeError):
     pass
 
 
+UNSUPPORTED_TEMPERATURE_PREFIXES: dict[ProviderName, tuple[str, ...]] = {
+    "openai": ("gpt-5", "o1", "o3", "o4"),
+    "anthropic": ("claude-opus-4", "claude-sonnet-4", "claude-haiku-4"),
+    "gemini": (),
+}
+
+
 class ModelProvider(ABC):
     name: ProviderName
 
@@ -59,31 +66,28 @@ class OpenAIProvider(ModelProvider):
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> ProviderResponse:
         model_name = model or self.default_model
-        try:
+        if hasattr(self.client, "responses"):
             kwargs: dict[str, Any] = {
                 "model": model_name,
                 "input": prompt,
+                "instructions": system_prompt,
                 "max_output_tokens": max_tokens,
+                **_temperature_kwargs(self.name, model_name, temperature),
             }
-            if system_prompt:
-                kwargs["instructions"] = system_prompt
-            if temperature is not None:
-                kwargs["temperature"] = temperature
             response = await self.client.responses.create(**kwargs)
             content = _extract_openai_response_text(response)
             usage = _dump_usage(getattr(response, "usage", None))
-        except AttributeError:
+        else:
             messages: list[dict[str, str]] = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
-            kwargs = {
+            kwargs: dict[str, Any] = {
                 "model": model_name,
                 "messages": messages,
                 "max_tokens": max_tokens,
+                **_temperature_kwargs(self.name, model_name, temperature),
             }
-            if temperature is not None:
-                kwargs["temperature"] = temperature
             response = await self.client.chat.completions.create(**kwargs)
             content = response.choices[0].message.content or ""
             usage = _dump_usage(getattr(response, "usage", None))
@@ -115,12 +119,10 @@ class AnthropicProvider(ModelProvider):
         kwargs: dict[str, Any] = {
             "model": model_name,
             "max_tokens": max_tokens,
+            "system": system_prompt,
             "messages": [{"role": "user", "content": prompt}],
+            **_temperature_kwargs(self.name, model_name, temperature),
         }
-        if system_prompt:
-            kwargs["system"] = system_prompt
-        if temperature is not None:
-            kwargs["temperature"] = temperature
         response = await self.client.messages.create(**kwargs)
         text_parts = [
             block.text for block in response.content if getattr(block, "type", None) == "text"
@@ -157,12 +159,11 @@ class GeminiProvider(ModelProvider):
         model_name = model or self.default_model
 
         def call() -> Any:
-            kwargs: dict[str, Any] = {"max_output_tokens": max_tokens}
-            if system_prompt:
-                kwargs["system_instruction"] = system_prompt
-            if temperature is not None:
-                kwargs["temperature"] = temperature
-            config = genai_types.GenerateContentConfig(**kwargs)
+            config = genai_types.GenerateContentConfig(
+                max_output_tokens=max_tokens,
+                system_instruction=system_prompt,
+                **_temperature_kwargs(self.name, model_name, temperature),
+            )
             return self.client.models.generate_content(
                 model=model_name,
                 contents=prompt,
@@ -238,7 +239,7 @@ class ProviderRegistry:
         normalized = requested.lower()
         if normalized in {"openai", "anthropic", "gemini"}:
             provider_name = normalized  # type: ignore[assignment]
-            default_model = self.model_registry.default_for_provider(provider_name)
+            default_model = self._provider_default_or_none(provider_name)
             if not default_model and provider_name in self.providers:
                 default_model = self.providers[provider_name].default_model
             if not default_model:
@@ -280,7 +281,7 @@ class ProviderRegistry:
             )
         return provider, model
 
-    async def list_models(self) -> dict[str, Any]:
+    async def list_models(self, *, include_deprecated: bool = False) -> dict[str, Any]:
         live_errors: dict[str, str] = {}
         if self.settings.model_discovery == "list":
             for provider_name, provider in self.providers.items():
@@ -295,13 +296,25 @@ class ProviderRegistry:
             "configured_providers": sorted(self.providers),
             "discovery": self.settings.model_discovery,
             "live_errors": live_errors,
-            "models": self.model_registry.list_entries(set(self.providers)),
+            "models": self.model_registry.list_entries(
+                set(self.providers),
+                include_deprecated=include_deprecated,
+            ),
+            "deprecated_model_count": len(self.model_registry.deprecated_entries),
+            "deprecated_models_included": include_deprecated,
         }
 
+    def _provider_default_or_none(self, provider_name: ProviderName) -> str | None:
+        try:
+            return self.model_registry.default_for_provider(provider_name)
+        except ModelRegistryError as exc:
+            raise ProviderError(
+                f"Configured default model for provider '{provider_name}' is unusable: {exc}"
+            ) from exc
+
     def _provider_default(self, provider_name: ProviderName) -> str:
-        return (
-            self.model_registry.default_for_provider(provider_name)
-            or getattr(self.settings, f"{provider_name}_model")
+        return self._provider_default_or_none(provider_name) or getattr(
+            self.settings, f"{provider_name}_model"
         )
 
 
@@ -317,6 +330,21 @@ def _extract_openai_response_text(response: Any) -> str:
             if text:
                 parts.append(text)
     return "\n".join(parts)
+
+
+def _temperature_kwargs(
+    provider: ProviderName,
+    model: str,
+    temperature: float | None,
+) -> dict[str, float]:
+    if temperature is None or not _supports_temperature(provider, model):
+        return {}
+    return {"temperature": temperature}
+
+
+def _supports_temperature(provider: ProviderName, model: str) -> bool:
+    normalized = model.lower()
+    return not normalized.startswith(UNSUPPORTED_TEMPERATURE_PREFIXES[provider])
 
 
 def _dump_usage(usage: Any) -> dict | None:
